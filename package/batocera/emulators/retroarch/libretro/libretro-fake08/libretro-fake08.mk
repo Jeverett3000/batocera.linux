@@ -3,12 +3,13 @@
 # libretro-fake08
 #
 ################################################################################
-# Version: Commits on Apr 17, 2024
-LIBRETRO_FAKE08_VERSION = d98376fc41c34e3cd6d3ffc25ae9c2970efd5286
+# Version: Commits on Sept 2, 2024
+LIBRETRO_FAKE08_VERSION = 0d26fd59103941e5f95e0ee665c6e0fb8c6b6f03
 LIBRETRO_FAKE08_SITE_METHOD=git
 LIBRETRO_FAKE08_SITE=https://github.com/jtothebell/fake-08
 LIBRETRO_FAKE08_LICENSE = MIT
 LIBRETRO_FAKE08_GIT_SUBMODULES=YES
+LIBRETRO_FAKE08_DEPENDENCIES += retroarch
 
 define LIBRETRO_FAKE08_BUILD_CMDS
 	$(TARGET_CONFIGURE_OPTS) $(MAKE) CXX="$(TARGET_CXX)" CC="$(TARGET_CC)" \

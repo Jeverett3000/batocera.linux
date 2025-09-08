@@ -1,15 +1,21 @@
-#!/usr/bin/env python
-import Command
-from generators.Generator import Generator
-import controllersConfig
-import os
-import batoceraFiles
-import subprocess
+from __future__ import annotations
 
-from utils.logger import get_logger
-eslog = get_logger(__name__)
+from typing import TYPE_CHECKING
+
+from ... import Command
+from ...controller import generate_sdl_game_controller_config
+from ..Generator import Generator
+
+if TYPE_CHECKING:
+    from ...types import HotkeysContext
 
 class StellaGenerator(Generator):
+
+    def getHotkeysContext(self) -> HotkeysContext:
+        return {
+            "name": "stella",
+            "keys": { "exit": ["KEY_LEFTALT", "KEY_F4"] }
+        }
 
     def generate(self, system, rom, playersControllers, metadata, guns, wheels, gameResolution):
         # Launch Stella
@@ -18,6 +24,6 @@ class StellaGenerator(Generator):
         return Command.Command(
             array=commandArray,
             env={
-                'SDL_GAMECONTROLLERCONFIG': controllersConfig.generateSdlGameControllerConfig(playersControllers)
+                'SDL_GAMECONTROLLERCONFIG': generate_sdl_game_controller_config(playersControllers)
             }
         )

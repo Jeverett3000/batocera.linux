@@ -1,10 +1,14 @@
-#!/usr/bin/env python
-import Command
-import batoceraFiles
-from generators.Generator import Generator
-import os.path
-import glob
+from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+from ... import Command
+from ..Generator import Generator
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from ...types import HotkeysContext
 
 class DosBoxStagingGenerator(Generator):
 
@@ -12,21 +16,38 @@ class DosBoxStagingGenerator(Generator):
     # Return command
     def generate(self, system, rom, playersControllers, metadata, guns, wheels, gameResolution):
         # Find rom path
-        gameDir = rom
-        batFile = gameDir + "/dosbox.bat"
-        gameConfFile = gameDir + "/dosbox.cfg"
-           
-        commandArray = [batoceraFiles.batoceraBins[system.config['emulator']],
-			"-fullscreen",
-			"-userconf", 
-			"-exit", 
-			f"""{batFile}""",
-			"-c", f"""set ROOT={gameDir}"""]
-        if os.path.isfile(gameConfFile):
-            commandArray.append("-conf")
-            commandArray.append(f"""{gameConfFile}""")
-        else:
-            commandArray.append("-conf")
-            commandArray.append(f"""{batoceraFiles.dosboxStagingConfig}""")
+        batFile = rom / "dosbox.bat"
+        gameConfFile_cfg = rom / "dosbox.cfg"
+        gameConfFile_conf = rom / "dosbox.conf"
+
+        commandArray: list[Path | str] = [
+            '/usr/bin/dosbox-staging',
+            "-fullscreen",
+            "-userconf",
+            "-exit",
+        ]
+
+        # Append the batch file to execute
+        if batFile.is_file():
+            commandArray.append(batFile)
+
+        commandArray.extend(["-c", f"""set ROOT={rom!s}"""])
+
+        # Determine which config file to use
+        configFileToUse = None
+        if gameConfFile_cfg.is_file():
+            configFileToUse = gameConfFile_cfg
+        elif gameConfFile_conf.is_file():
+            configFileToUse = gameConfFile_conf
+
+        # Append the specific game config file if found
+        if configFileToUse is not None:
+            commandArray.extend(["-conf", str(configFileToUse)])
 
         return Command.Command(array=commandArray)
+
+    def getHotkeysContext(self) -> HotkeysContext:
+        return {
+            "name": "dosboxstaging",
+            "keys": { "exit": ["KEY_LEFTCTRL", "KEY_F9"] }
+        }

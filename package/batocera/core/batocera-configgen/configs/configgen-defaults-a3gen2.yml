@@ -4,6 +4,9 @@ gamecube:
 nds:
   emulator: libretro
   core:     melonds
+3ds:
+  emulator: azahar
+  core:     azahar
 wii:
   emulator: libretro
   core:     dolphin
@@ -22,4 +25,9 @@ flash:
 kodi:
   options:
     hud_support: false # doesn't play nice with vulkan mangohud
-
+cdi:
+  emulator: libretro
+  core:     same_cdi
+quake3:
+  emulator: vkquake3
+  core:     vkquake3

@@ -1,36 +1,44 @@
-#!/usr/bin/env python
+from __future__ import annotations
 
-import Command
-import batoceraFiles
-from generators.Generator import Generator
+import logging
 import os
 import re
-from settings.unixSettings import UnixSettings
-from utils.logger import get_logger
+from typing import TYPE_CHECKING
+
+from ... import Command
+from ...batoceraPaths import CONFIGS, ROMS, SAVES, mkdir_if_not_exists
+from ...settings.unixSettings import UnixSettings
+from ..Generator import Generator
 from . import openborControllers
 
-eslog = get_logger(__name__)
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from ...types import HotkeysContext
+
+_logger = logging.getLogger(__name__)
 
 class OpenborGenerator(Generator):
 
+    def getHotkeysContext(self) -> HotkeysContext:
+        return {
+            "name": "openbor",
+            "keys": { "exit": ["KEY_LEFTALT", "KEY_F4"] }
+        }
+
     # Main entry of the module
     def generate(self, system, rom, playersControllers, metadata, guns, wheels, gameResolution):
-        configDir = batoceraFiles.CONF + '/openbor'
-        if not os.path.exists(configDir):
-            os.makedirs(configDir)
-
-        savesDir = batoceraFiles.SAVES + '/openbor'
-        if not os.path.exists(savesDir):
-            os.makedirs(savesDir)
+        configDir = CONFIGS / 'openbor'
+        mkdir_if_not_exists(configDir)
+        mkdir_if_not_exists(SAVES / 'openbor')
 
         # guess the version to run
-        core = system.config['core']
-        if system.config["core-forced"] == False:
+        core = system.config.core
+        if not system.config.core_forced:
             core = OpenborGenerator.guessCore(rom)
-        eslog.debug(f"core taken is {core}")
+        _logger.debug("core taken is %s", core)
 
         # config file
-        configfilename = "config7530.ini"
         if core == "openbor4432":
             configfilename = "config4432.ini"
         elif core == "openbor6412":
@@ -39,8 +47,10 @@ class OpenborGenerator(Generator):
             configfilename = "config7142.ini"
         elif core == "openbor7530":
             configfilename = "config7530.ini"
+        else:
+            configfilename = "config7530.ini"
 
-        config = UnixSettings(configDir + "/" + configfilename, separator='')
+        config = UnixSettings(configDir / configfilename, separator='')
 
         # general
         config.save("fullscreen", "1")
@@ -48,50 +58,30 @@ class OpenborGenerator(Generator):
         config.save("usejoy", "1")
 
         # options
-        if system.isOptSet("openbor_ratio"):
-            config.save("stretch", system.config["openbor_ratio"])
-        else:
-            config.save("stretch", "0")
-
-        if system.isOptSet("openbor_filter"):
-            config.save("swfilter", system.config["openbor_filter"])
-        else:
-            config.save("swfilter", "0")
-        
-        if system.isOptSet("openbor_vsync"):
-            config.save("vsync", system.config["openbor_vsync"])
-        else:
-            config.save("vsync", "1")
-
-        if system.isOptSet("openbor_limit"):
-            config.save("fpslimit", system.config["openbor_limit"])
-        else:
-            config.save("fpslimit", "0")
+        config.save("stretch", system.config.get("openbor_ratio", "0"))
+        config.save("swfilter", system.config.get("openbor_filter", "0"))
+        config.save("vsync", system.config.get("openbor_vsync", "1"))
+        config.save("fpslimit", system.config.get("openbor_limit", "0"))
 
         # controllers
         openborControllers.generateControllerConfig(config, playersControllers, core)
 
         # rumble
-        if system.isOptSet("openbor_rumble"):
-            config.save("joyrumble.0", system.config["openbor_rumble"])
-            config.save("joyrumble.1", system.config["openbor_rumble"])
-            config.save("joyrumble.2", system.config["openbor_rumble"])
-            config.save("joyrumble.3", system.config["openbor_rumble"])
-        else:
-            config.save("joyrumble.0", "0")
-            config.save("joyrumble.1", "0")
-            config.save("joyrumble.2", "0")
-            config.save("joyrumble.3", "0")
+        rumble = system.config.get("openbor_rumble", "0")
+        config.save("joyrumble.0", rumble)
+        config.save("joyrumble.1", rumble)
+        config.save("joyrumble.2", rumble)
+        config.save("joyrumble.3", rumble)
 
         config.write()
 
         # change directory for wider compatibility
-        os.chdir("/userdata/roms/openbor")
+        os.chdir(ROMS / "openbor")
 
         return OpenborGenerator.executeCore(core, rom)
 
     @staticmethod
-    def executeCore(core, rom):
+    def executeCore(core: str, rom: Path) -> Command.Command:
         if core == "openbor4432":
             commandArray = ["OpenBOR4432", rom]
         elif core == "openbor6412":
@@ -105,9 +95,9 @@ class OpenborGenerator(Generator):
         return Command.Command(array=commandArray)
 
     @staticmethod
-    def guessCore(rom):
-        versionstr = re.search(r'\[.*([0-9]{4})\]+', os.path.basename(rom))
-        if versionstr == None:
+    def guessCore(rom: Path) -> str:
+        versionstr = re.search(r'\[.*([0-9]{4})\]+', rom.name)
+        if versionstr is None:
             return "openbor7530"
         version = int(versionstr.group(1))
 

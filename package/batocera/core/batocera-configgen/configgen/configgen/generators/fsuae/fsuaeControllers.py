@@ -1,11 +1,17 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+from __future__ import annotations
 
-import batoceraFiles
-import os.path
+from typing import TYPE_CHECKING
+
+from ...batoceraPaths import mkdir_if_not_exists
+from .fsuaePaths import FSUAE_CONFIG_DIR
+
+if TYPE_CHECKING:
+    from ...controller import Controllers
+    from ...Emulator import Emulator
+
 
 # Create the controller configuration file
-def generateControllerConfig(system, playersControllers):
+def generateControllerConfig(system: Emulator, playersControllers: Controllers) -> None:
 
     fsuaeMapping = {
         'a':      'east_button',   'b':        'south_button',
@@ -26,17 +32,16 @@ def generateControllerConfig(system, playersControllers):
                                 'joystick2up': 'joystick2down', 'joystick2left': 'joystick2right',}
 
     # create the directory for the first time
-    confDirectory = batoceraFiles.fsuaeConfig + "/Controllers"
-    if not os.path.exists(confDirectory):
-        os.makedirs(confDirectory)
+    confDirectory = FSUAE_CONFIG_DIR / "Controllers"
+    mkdir_if_not_exists(confDirectory)
 
-    for playercontroller, pad in sorted(playersControllers.items()):
-        configFileName = "{}/{}".format(batoceraFiles.fsuaeConfig, "Controllers/" + pad.guid + "_linux.conf")
-        f = open(configFileName, "w")
+    for pad in playersControllers:
+        configFileName = confDirectory / f"{pad.guid}_linux.conf"
+        f = configFileName.open("w")
 
         # fs-uae-controller
         f.write("[fs-uae-controller]\n")
-        f.write("name = " + pad.realName + "\n")
+        f.write(f"name = {pad.real_name}\n")
         f.write("platform = linux\n")
         f.write("\n")
 
@@ -46,14 +51,14 @@ def generateControllerConfig(system, playersControllers):
 
         for x in pad.inputs:
             input = pad.inputs[x]
-            #f.write("# undefined key: name="+input.name+", type="+input.type+", id="+str(input.id)+", value="+str(input.value)+"\n")
+            #f.write(f"# undefined key: name={input.name}, type={input.type}, id={input.id}, value={input.value}\n")
 
             if input.name in fsuaeMapping:
                 if input.type == "button":
-                    f.write("button_" + str(input.id) + " = " + fsuaeMapping[input.name] + "\n")
+                    f.write(f"button_{input.id} = {fsuaeMapping[input.name]}\n")
                 elif input.type == "hat":
                     if input.value in fsuaeHatMapping:
-                        f.write("hat_" + str(input.id) + "_" + fsuaeHatMapping[input.value] + " = " + fsuaeMapping[input.name] + "\n")
+                        f.write(f"hat_{input.id}_{fsuaeHatMapping[input.value]} = {fsuaeMapping[input.name]}\n")
                 elif input.type == "axis":
                     if input.value == "1":
                         axis_valstr = "pos"
@@ -61,7 +66,7 @@ def generateControllerConfig(system, playersControllers):
                     else:
                         axis_valstr = "neg"
                         revaxis_valstr = "pos"
-                    f.write("axis_" + str(input.id) + "_" +    axis_valstr + " = " + fsuaeMapping[input.name] + "\n")
+                    f.write(f"axis_{input.id}_{axis_valstr} = {fsuaeMapping[input.name]}\n")
                     if input.name in fsuaeReverseAxisMapping and fsuaeReverseAxisMapping[input.name] in fsuaeMapping:
-                        f.write("axis_" + str(input.id) + "_" + revaxis_valstr + " = " + fsuaeMapping[fsuaeReverseAxisMapping[input.name]] + "\n")
+                        f.write(f"axis_{input.id}_{revaxis_valstr} = {fsuaeMapping[fsuaeReverseAxisMapping[input.name]]}\n")
         f.close()

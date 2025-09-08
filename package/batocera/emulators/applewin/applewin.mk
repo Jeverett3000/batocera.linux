@@ -3,8 +3,8 @@
 # applewin
 #
 ################################################################################
-# Version: Commits on May 12, 2024
-APPLEWIN_VERSION = a6367163cc896400a1f4f60145bfbb140a6ce4b3
+# Version: Commits on Feb 8, 2025
+APPLEWIN_VERSION = bb9da62c4ae7f7b5d65edf81bf3f05d6dad137ef
 APPLEWIN_SITE = https://github.com/audetto/AppleWin
 APPLEWIN_SITE_METHOD=git
 APPLEWIN_GIT_SUBMODULES=YES
@@ -17,7 +17,7 @@ APPLEWIN_CONF_OPTS  = -DCMAKE_BUILD_TYPE=Release
 APPLEWIN_CONF_OPTS += -DBUILD_SA2=ON
 APPLEWIN_CONF_OPTS += -DBUILD_LIBRETRO=ON
 
-ifeq ($(BR2_PACKAGE_HAS_OPENGL),y)
+ifeq ($(BR2_PACKAGE_HAS_LIBGL),y)
 APPLEWIN_CONF_OPTS += -DSA2_OPENGL=ON
 else
 APPLEWIN_CONF_OPTS += -DSA2_OPENGL=OFF

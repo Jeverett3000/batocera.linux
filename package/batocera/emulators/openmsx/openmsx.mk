@@ -4,7 +4,7 @@
 #
 ################################################################################
 
-OPENMSX_VERSION = RELEASE_19_1
+OPENMSX_VERSION = RELEASE_20_0
 OPENMSX_SITE = $(call github,openMSX,openMSX,$(OPENMSX_VERSION))
 OPENMSX_LICENSE = GPLv2
 OPENMSX_DEPENDENCIES = zlib sdl2 sdl2_ttf libpng tcl freetype
@@ -28,9 +28,9 @@ else
 OPENMSX_CONF_OPTS += -Dalsamidi=disabled
 endif
 #glrenderer
-ifeq ($(BR2_PACKAGE_LIBGLEW),y)
+ifeq ($(BR2_PACKAGE_LIBGLEW)$(BR2_PACKAGE_LIBGLU),yy)
 OPENMSX_CONF_OPTS += -Dglrenderer=enabled
-OPENMSX_DEPENDENCIES += libglew
+OPENMSX_DEPENDENCIES += libglew libglu
 else
 OPENMSX_CONF_OPTS += -Dglrenderer=disabled
 endif
@@ -45,8 +45,10 @@ endif
 #fix tclConfig.sh paths!
 define OPENMSX_TCL_CONFIG_FIXUP
     cp $(STAGING_DIR)/usr/lib/tclConfig.sh $(STAGING_DIR)/usr/lib/tclConfig.sh.bak
-    sed -i "s@TCL_LIB_SPEC='-L/usr/lib -ltcl8.6'@TCL_LIB_SPEC='-L$(STAGING_DIR)/usr/lib -ltcl8.6'@" $(STAGING_DIR)/usr/lib/tclConfig.sh
-    sed -i "s@TCL_INCLUDE_SPEC='-I/usr/include'@TCL_INCLUDE_SPEC='-I$(STAGING_DIR)/usr/include'@" $(STAGING_DIR)/usr/lib/tclConfig.sh
+    sed -i "s@TCL_LIB_SPEC='-L/usr/lib -ltcl8.6'@TCL_LIB_SPEC='-L$(STAGING_DIR)/usr/lib -ltcl8.6'@" \
+        $(STAGING_DIR)/usr/lib/tclConfig.sh
+    sed -i "s@TCL_INCLUDE_SPEC='-I/usr/include'@TCL_INCLUDE_SPEC='-I$(STAGING_DIR)/usr/include'@" \
+        $(STAGING_DIR)/usr/lib/tclConfig.sh
 endef
 
 #change the appropriate directories & then compile & install.
@@ -61,8 +63,10 @@ endef
 
 define OPENMSX_INSTALL_TARGET_CMDS
     mkdir -p $(TARGET_DIR)/usr/share/evmapy
-    cp -f $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/openmsx/*.keys $(TARGET_DIR)/usr/share/evmapy/
-    cp -f $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/openmsx/settings.xml $(TARGET_DIR)/usr/share/openmsx
+    cp -f $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/openmsx/*.keys \
+        $(TARGET_DIR)/usr/share/evmapy/
+    cp -f $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/openmsx/settings.xml \
+        $(TARGET_DIR)/usr/share/openmsx
 endef
 
 define OPENMSX_POST_INSTALL_CLEANUP

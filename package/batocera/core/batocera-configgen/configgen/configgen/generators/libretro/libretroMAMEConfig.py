@@ -1,20 +1,27 @@
-#!/usr/bin/env python
-from PIL import Image, ImageOps
-from pathlib import Path
-from settings.unixSettings import UnixSettings
-from utils.logger import get_logger
-from xml.dom import minidom
-import xml.etree.ElementTree as ET
-import Command
-import batoceraFiles
+from __future__ import annotations
+
 import codecs
-import configparser
 import csv
+import logging
 import os
-import shutil
 import subprocess
-import sys
+import shutil
+import xml.etree.ElementTree as ET
 import zipfile
+from pathlib import Path
+from typing import TYPE_CHECKING
+from xml.dom import minidom
+
+from ...batoceraPaths import BIOS, CONFIGS, DEFAULTS_DIR, ROMS, SAVES, USER_DECORATIONS, mkdir_if_not_exists
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from ...controller import Controller, Controllers
+    from ...Emulator import Emulator
+    from ...gun import Guns
+
+_logger = logging.getLogger(__name__)
 
 # Define RetroPad inputs for mapping
 retroPad = {
@@ -44,66 +51,59 @@ retroPad = {
     "start":            "START"
 }
 
-def generateMAMEConfigs(playersControllers, system, rom, guns):
+def generateMAMEConfigs(playersControllers: Controllers, system: Emulator, rom: Path, guns: Guns) -> None:
     # Generate command line for MAME/MESS/MAMEVirtual
-    commandLine = []
-    romBasename = os.path.basename(rom)
-    romDirname  = os.path.dirname(rom)
-    (romDrivername, romExt) = os.path.splitext(romBasename)
+    commandLine: list[str | Path] = []
+    romDrivername = rom.stem
     specialController = 'none'
 
-    if system.config['core'] in [ 'mame', 'mess', 'mamevirtual' ]:
-        corePath = 'lr-' + system.config['core']
+    if system.config.core in [ 'mame', 'mess', 'mamevirtual' ]:
+        corePath = f"lr-{system.config.core}"
     else:
-        corePath = system.config['core']
+        corePath = str(system.config.core)
 
-    if system.name in [ 'mame', 'neogeo', 'lcdgames', 'plugnplay', 'vis' ]:
+    if system.name in [ 'mame', 'neogeo', 'lcdgames', 'plugnplay', 'vis', 'namco22', 'model2']:
         # Set up command line for basic systems
         # ie. no media, softlists, etc.
-        if system.getOptBoolean("customcfg"):
-            cfgPath = "/userdata/system/configs/{}/custom/".format(corePath)
+        if system.config.get_bool("customcfg"):
+            cfgPath = CONFIGS / corePath / "custom"
         else:
-            cfgPath = "/userdata/saves/mame/mame/cfg/"
-        if not os.path.exists(cfgPath):
-            os.makedirs(cfgPath)
+            cfgPath = SAVES / "mame" / "mame" / "cfg"
+        mkdir_if_not_exists(cfgPath)
         if system.name == 'vis':
             commandLine += [ 'vis', '-cdrom', f'"{rom}"' ]
         else:
             commandLine += [ romDrivername ]
-        commandLine += [ '-cfg_directory', cfgPath ]
-        commandLine += [ '-rompath', f'"{romDirname};/userdata/bios/mame/;/userdata/bios/"' ]
-        pluginsToLoad = []
-        if not (system.isOptSet("hiscoreplugin") and system.getOptBoolean("hiscoreplugin") == False):
+        commandLine += [ '-cfg_directory', f'"{cfgPath}"' ]
+        commandLine += [ '-rompath', f'"{rom.parent};/userdata/bios/mame/;/userdata/bios/"' ]
+        pluginsToLoad: list[str] = []
+        if system.config.get_bool("hiscoreplugin", True):
             pluginsToLoad += [ "hiscore" ]
-        if system.isOptSet("coindropplugin") and system.getOptBoolean("coindropplugin"):
+        if system.config.get_bool("coindropplugin"):
             pluginsToLoad += [ "coindrop" ]
-        if len(pluginsToLoad) > 0:
+        if pluginsToLoad:
             commandLine += [ "-plugins", "-plugin", ",".join(pluginsToLoad) ]
         messMode = -1
         messModel = ''
     else:
         # Set up command line for MESS or MAMEVirtual
-        softDir = "/var/run/mame_software/"
+        softDir = Path("/var/run/mame_software")
         subdirSoftList = [ "mac_hdd", "bbc_hdd", "cdi", "archimedes_hdd", "fmtowns_cd" ]
-        if system.isOptSet("softList") and system.config["softList"] != "none":
-            softList = system.config["softList"]
-        else:
+        softList = system.config.get("softList", "none")
+        if softList == "none":
             softList = ""
 
         # Auto softlist for FM Towns if there is a zip that matches the folder name
         # Used for games that require a CD and floppy to both be inserted
-        if system.name == 'fmtowns' and softList == '':
-            romParentPath = os.path.basename(romDirname)
-            if os.path.exists('/userdata/roms/fmtowns/{}.zip'.format(romParentPath)):
-                softList = 'fmtowns_cd'
+        if system.name == 'fmtowns' and softList == '' and (ROMS / 'fmtowns' / f'{rom.parent.name}.zip').exists():
+            softList = 'fmtowns_cd'
 
         # Determine MESS system name (if needed)
-        messDataFile = '/usr/share/batocera/configgen/data/mame/messSystems.csv'
-        openFile = open(messDataFile, 'r')
-        messSystems = []
-        messSysName = []
-        messRomType = []
-        messAutoRun = []
+        openFile = (DEFAULTS_DIR / "data" / "mame" / "messSystems.csv").open()
+        messSystems: list[str] = []
+        messSysName: list[str] = []
+        messRomType: list[str] = []
+        messAutoRun: list[str] = []
         with openFile:
             messDataList = csv.reader(openFile, delimiter=';', quotechar="'")
             for row in messDataList:
@@ -115,107 +115,100 @@ def generateMAMEConfigs(playersControllers, system, rom, guns):
 
         # Alternate system for machines that have different configs (ie computers with different hardware)
         messModel = messSysName[messMode]
-        if system.isOptSet("altmodel"):
-            messModel = system.config["altmodel"]
+        if altmodel := system.config.get("altmodel"):
+            messModel = altmodel
         commandLine += [ messModel ]
 
         if messSysName[messMode] == "":
             # Command line for non-arcade, non-system ROMs (lcdgames, plugnplay)
-            if system.getOptBoolean("customcfg"):
-                cfgPath = "/userdata/system/configs/{}/custom/".format(corePath)
+            if system.config.get_bool("customcfg"):
+                cfgPath = CONFIGS / corePath / "custom"
             else:
-                cfgPath = "/userdata/saves/mame/mame/cfg/"
-            if not os.path.exists(cfgPath):
-                os.makedirs(cfgPath)
+                cfgPath = SAVES / "mame" / "mame" / "cfg"
+            mkdir_if_not_exists(cfgPath)
             commandLine += [ romDrivername ]
-            commandLine += [ '-cfg_directory', cfgPath ]
-            commandLine += [ '-rompath', f'"{romDirname};/userdata/bios/"' ]
+            commandLine += [ '-cfg_directory', f'"{cfgPath}"' ]
+            commandLine += [ '-rompath', f'"{rom.parent};/userdata/bios/"' ]
         else:
             # Command line for MESS consoles/computers
             # TI-99 32k RAM expansion & speech modules
             # Don't enable 32k by default
             if system.name == "ti99":
                 commandLine += [ "-ioport", "peb" ]
-                if system.isOptSet("ti99_32kram") and system.getOptBoolean("ti99_32kram"):
+                if system.config.get_bool("ti99_32kram"):
                     commandLine += ["-ioport:peb:slot2", "32kmem"]
-                if not system.isOptSet("ti99_speech") or (system.isOptSet("ti99_speech") and system.getOptBoolean("ti99_speech")):
-                    commandLine += ["-ioport:peb:slot3", "speech"]
+                if system.config.get_bool("ti99_speech", True):
+                    commandLine += ["-ioport", "speechsyn"]
 
             #Laser 310 Memory Expansion & joystick
             if system.name == "laser310":
-                commandLine += ['-io', 'joystick']
-                if not system.isOptSet('memslot'):
-                    laser310mem = 'laser_64k'
-                else:
-                    laser310mem = system.config['memslot']
-                commandLine += ["-mem", laser310mem]
+                commandLine += ['-io', 'joystick', "-mem", system.config.get('memslot', 'laser_64k')]
 
             # BBC Joystick
-            if system.name == "bbc":
-                if system.isOptSet('sticktype') and system.config['sticktype'] != 'none':
-                    commandLine += ["-analogue", system.config['sticktype']]
-                    specialController = system.config['sticktype']
+            if system.name == "bbc" and system.config.get('sticktype', 'none') != 'none':
+                commandLine += ["-analogue", system.config['sticktype']]
+                specialController = system.config['sticktype']
 
             # Apple II
             if system.name == "apple2":
-                commandLine += ["-sl7", "cffa202"]
-                if system.isOptSet('gameio') and system.config['gameio'] != 'none':
-                    if system.config['gameio'] == 'joyport' and messModel != 'apple2p':
-                        eslog.debug("Joyport is only compatible with Apple II +")
+                rom_extension = rom.suffix.lower()
+                # only add SD/IDE control if provided a hard drive image
+                if rom_extension in {".hdv", ".2mg", ".chd", ".iso", ".bin", ".cue"}:
+                    commandLine += ["-sl7", "cffa202"]
+                if (gameio := system.config.get('gameio', 'none')) != 'none':
+                    if gameio == 'joyport' and messModel != 'apple2p':
+                        _logger.debug("Joyport is only compatible with Apple II Plus")
                     else:
-                        commandLine += ["-gameio", system.config['gameio']]
-                        specialController = system.config['gameio']
+                        commandLine += ["-gameio", gameio]
+                        specialController = gameio
 
             # RAM size (Mac excluded, special handling below)
-            if system.name != "macintosh" and system.isOptSet("ramsize"):
-                commandLine += [ '-ramsize', str(system.config["ramsize"]) + 'M' ]
+            ramSize = system.config.get_int('ramsize')
+            if system.name != "macintosh" and ramSize:
+                commandLine += [ '-ramsize', str(ramSize) + 'M' ]
 
             # Mac RAM & Image Reader (if applicable)
-            if system.name == "macintosh":
-                if system.isOptSet("ramsize"):
-                    ramSize = int(system.config["ramsize"])
-                    if messModel in [ 'maciix', 'maclc3' ]:
-                        if messModel == 'maclc3' and ramSize == 2:
-                            ramSize = 4
-                        if messModel == 'maclc3' and ramSize > 80:
-                            ramSize = 80
-                        if messModel == 'maciix' and ramSize == 16:
-                            ramSize = 32
-                        if messModel == 'maciix' and ramSize == 48:
-                            ramSize = 64
-                        commandLine += [ '-ramsize', str(ramSize) + 'M' ]
-                    if messModel == 'maciix':
-                        imageSlot = 'nba'
-                        if system.isOptSet('imagereader'):
-                            if system.config["imagereader"] == "disabled":
-                                imageSlot = ''
-                            else:
-                                imageSlot = system.config["imagereader"]
-                        if imageSlot != "":
-                            commandLine += [ "-" + imageSlot, 'image' ]
+            if system.name == "macintosh" and ramSize:
+                if messModel in [ 'maciix', 'maclc3' ]:
+                    if messModel == 'maclc3' and ramSize == 2:
+                        ramSize = 4
+                    if messModel == 'maclc3' and ramSize > 80:
+                        ramSize = 80
+                    if messModel == 'maciix' and ramSize == 16:
+                        ramSize = 32
+                    if messModel == 'maciix' and ramSize == 48:
+                        ramSize = 64
+                    commandLine += [ '-ramsize', str(ramSize) + 'M' ]
+                if messModel == 'maciix':
+                    imageSlot = system.config.get('imagereader', 'nba')
+                    if imageSlot != "disabled":
+                        commandLine += [ f"-{imageSlot}", "image" ]
+
+            altromtype = system.config.get_str("altromtype")
+            boot_disk = system.config.get("bootdisk")
 
             if softList != "":
                 # Software list ROM commands
-                prepSoftwareList(subdirSoftList, softList, softDir, "/userdata/bios/mame/hash", romDirname)
+                prepSoftwareList(subdirSoftList, softList, softDir, BIOS / "mame" / "hash", rom.parent)
                 if softList in subdirSoftList:
-                    commandLine += [ os.path.basename(romDirname) ]
+                    commandLine += [ rom.parent.name ]
                 else:
                     commandLine += [ romDrivername ]
                 commandLine += [ "-rompath", f'"{softDir};/userdata/bios/"' ]
-                commandLine += [ "-swpath", softDir ]
+                commandLine += [ "-swpath", f'"{softDir}"' ]
                 commandLine += [ "-verbose" ]
             else:
                 # Alternate ROM type for systems with mutiple media (ie cassette & floppy)
                 # Mac will auto change floppy 1 to 2 if a boot disk is enabled
                 if system.name != "macintosh":
-                    if system.isOptSet("altromtype"):
-                        if system.config["altromtype"] == "flop1" and messModel == "fmtmarty":
+                    if altromtype:
+                        if altromtype == "flop1" and messModel == "fmtmarty":
                             commandLine += [ "-flop" ]
                         else:
-                            commandLine += [ "-" + system.config["altromtype"] ]
+                            commandLine += [ "-" + altromtype ]
                     elif system.name == "adam":
                         # add some logic based on the extension
-                        rom_extension = os.path.splitext(rom)[1].lower()
+                        rom_extension = rom.suffix.lower()
                         if rom_extension == ".ddp":
                             commandLine += [ "-cass1" ]
                         elif rom_extension == ".dsk":
@@ -223,22 +216,22 @@ def generateMAMEConfigs(playersControllers, system, rom, guns):
                         else:
                             commandLine += [ "-cart1" ]
                     elif system.name == "coco":
-                        if romExt.casefold() == ".cas":
+                        if rom.suffix.casefold() == ".cas":
                             commandLine += [ "-cass" ]
-                        elif romExt.casefold() == ".dsk":
+                        elif rom.suffix.casefold() == ".dsk":
                             commandLine += [ "-flop1" ]
                         else:
                             commandLine += [ "-cart" ]
                     # try to choose the right floppy for Apple2gs
                     elif system.name == "apple2gs":
-                        rom_extension = os.path.splitext(rom)[1].lower()
+                        rom_extension = rom.suffix.lower()
                         if rom_extension == ".zip":
                             with zipfile.ZipFile(rom, 'r') as zip_file:
                                 file_list = zip_file.namelist()
                                 # assume only one file in zip
                                 if len(file_list) == 1:
                                     filename = file_list[0]
-                                    rom_extension = os.path.splitext(filename)[1].lower()
+                                    rom_extension = Path(filename).suffix.lower()
                         if rom_extension in [".2mg", ".2img", ".img", ".image"]:
                             commandLine += [ "-flop3" ]
                         else:
@@ -246,85 +239,87 @@ def generateMAMEConfigs(playersControllers, system, rom, guns):
                     else:
                         commandLine += [ "-" + messRomType[messMode] ]
                 else:
-                    if system.isOptSet("bootdisk"):
-                        if ((system.isOptSet("altromtype") and system.config["altromtype"] == "flop1") or not system.isOptSet("altromtype")) and system.config["bootdisk"] in [ "macos30", "macos608", "macos701", "macos75" ]:
+                    if boot_disk:
+                        if (altromtype == "flop1" or not altromtype) and boot_disk in [ "macos30", "macos608", "macos701", "macos75" ]:
                             commandLine += [ "-flop2" ]
-                        elif system.isOptSet("altromtype"):
-                            commandLine += [ "-" + system.config["altromtype"] ]
+                        elif altromtype:
+                            commandLine += [ "-" + altromtype ]
                         else:
                             commandLine += [ "-" + messRomType[messMode] ]
                     else:
-                        if system.isOptSet("altromtype"):
-                            commandLine += [ "-" + system.config["altromtype"] ]
+                        if altromtype:
+                            commandLine += [ "-" + altromtype ]
                         else:
                             commandLine += [ "-" + messRomType[messMode] ]
                 # Use the full filename for MESS non-softlist ROMs
                 commandLine += [ f'"{rom}"' ]
-                commandLine += [ "-rompath", f'"{romDirname};/userdata/bios/"' ]
+                commandLine += [ "-rompath", f'"{rom.parent};/userdata/bios/"' ]
 
                 # Boot disk for Macintosh
                 # Will use Floppy 1 or Hard Drive, depending on the disk.
-                if system.name == "macintosh" and system.isOptSet("bootdisk"):
+                if system.name == "macintosh" and boot_disk:
                     if system.config["bootdisk"] in [ "macos30", "macos608", "macos701", "macos75" ]:
                         bootType = "-flop1"
-                        bootDisk = '"/userdata/bios/' + system.config["bootdisk"] + '.img"'
+                        bootDisk = '"/userdata/bios/' + boot_disk + '.img"'
                     else:
                         bootType = "-hard"
-                        bootDisk = '"/userdata/bios/' + system.config["bootdisk"] + '.chd"'
+                        bootDisk = '"/userdata/bios/' + boot_disk + '.chd"'
                     commandLine += [ bootType, bootDisk ]
 
                 # Create & add a blank disk if needed, insert into drive 2
                 # or drive 1 if drive 2 is selected manually or FM Towns Marty.
-                if system.isOptSet('addblankdisk') and system.getOptBoolean('addblankdisk'):
+                if system.config.get_bool('addblankdisk'):
                     if system.name == 'fmtowns':
-                        blankDisk = '/usr/share/mame/blank.fmtowns'
-                        targetFolder = '/userdata/saves/mame/{}'.format(system.name)
-                        targetDisk = '{}/{}.fmtowns'.format(targetFolder, os.path.splitext(romBasename)[0])
+                        blankDisk = Path('/usr/share/mame/blank.fmtowns')
+                        targetFolder = SAVES / 'mame' / system.name
+                        targetDisk = targetFolder / f'{rom.stem}.fmtowns'
                     # Add elif statements here for other systems if enabled
-                    if not os.path.exists(targetFolder):
-                        os.makedirs(targetFolder)
-                    if not os.path.exists(targetDisk):
+                    else:
+                        blankDisk = Path('/usr/share/mame/blank.default')
+                        targetFolder = SAVES / 'mame' / system.name
+                        targetDisk = targetFolder / f'{rom.stem}.default'
+                    mkdir_if_not_exists(targetFolder)
+                    if not targetDisk.exists():
                         shutil.copy2(blankDisk, targetDisk)
                     # Add other single floppy systems to this if statement
                     if messModel == "fmtmarty":
-                        commandLine += [ '-flop', targetDisk ]
-                    elif (system.isOptSet('altromtype') and system.config['altromtype'] == 'flop2'):
-                        commandLine += [ '-flop1', targetDisk ]
+                        commandLine += [ '-flop', f'"{targetDisk}"' ]
+                    elif altromtype == 'flop2':
+                        commandLine += [ '-flop1', f'"{targetDisk}"' ]
                     else:
-                        commandLine += [ '-flop2', targetDisk ]
+                        commandLine += [ '-flop2', f'"{targetDisk}"' ]
 
             # UI enable - for computer systems, the default sends all keys to the emulated system.
             # This will enable hotkeys, but some keys may pass through to MAME and not be usable in the emulated system.
-            if not (system.isOptSet("enableui") and not system.getOptBoolean("enableui")):
+            if system.config.get_bool("enableui", True):
                 commandLine += [ "-ui_active" ]
 
             # MESS config folder
-            if system.getOptBoolean("customcfg"):
-                cfgPath = "/userdata/system/configs/{}/{}/custom/".format(corePath, messSysName[messMode])
+            if system.config.get_bool("customcfg"):
+                cfgPath = CONFIGS / corePath / messSysName[messMode] / "custom"
             else:
-                cfgPath = "/userdata/saves/mame/mame/cfg/{}/".format(messSysName[messMode])
-            if system.getOptBoolean("pergamecfg"):
-                cfgPath = "/userdata/system/configs/{}/{}/{}/".format(corePath, messSysName[messMode], romBasename)
-            if not os.path.exists(cfgPath):
-                os.makedirs(cfgPath)
-            commandLine += [ '-cfg_directory', cfgPath ]
+                cfgPath = SAVES / "mame" / "cfg" / messSysName[messMode]
+            if system.config.get_bool("pergamecfg"):
+                cfgPath = CONFIGS / corePath / messSysName[messMode] / rom.name
+            mkdir_if_not_exists(cfgPath)
+            commandLine += [ '-cfg_directory', f'"{cfgPath}"' ]
 
             # Autostart via ini file
             # Init variables, delete old ini if it exists, prepare ini path
             # lr-mame does NOT support multiple ini paths
             autoRunCmd = ""
             autoRunDelay = 0
-            if not os.path.exists('/userdata/saves/mame/mame/ini/'):
-                     os.makedirs('/userdata/saves/mame/mame/ini/')
-            if os.path.exists('/userdata/saves/mame/mame/ini/batocera.ini'):
-                os.remove('/userdata/saves/mame/mame/ini/batocera.ini')
+            mameIniDir = SAVES / "mame" / "mame" / "ini"
+            mkdir_if_not_exists(mameIniDir)
+            if (mameIniDir / "batocera.ini").exists():
+                (mameIniDir / "batocera.ini").unlink()
             # bbc has different boots for floppy & cassette, no special boot for carts
             if system.name == "bbc":
-                if system.isOptSet("altromtype") or softList != "":
-                    if (system.isOptSet("altromtype") and system.config["altromtype"] == "cass") or softList[-4:] == "cass":
+                if altromtype or softList:
+                    if altromtype == "cass" or softList[-4:] == "cass":
                         autoRunCmd = '*tape\\nchain""\\n'
                         autoRunDelay = 2
-                    elif (system.isOptSet("altromtype") and system.config["altromtype"].startswith("flop")) or "flop" in softList:
+                    elif (altromtype and altromtype.startswith("flop")) or "flop" in softList:
                         autoRunCmd = '*cat\\n\\n\\n\\n*exec !boot\\n'
                         autoRunDelay = 3
                 else:
@@ -332,264 +327,310 @@ def generateMAMEConfigs(playersControllers, system, rom, guns):
                     autoRunDelay = 3
             # fm7 boots floppies, needs cassette loading
             elif system.name == "fm7":
-                if system.isOptSet("altromtype") or softList != "":
-                    if (system.isOptSet("altromtype") and system.config["altromtype"] == "cass") or softList[-4:] == "cass":
-                        autoRunCmd = 'LOADM”“,,R\\n'
-                        autoRunDelay = 5
+                if (
+                    system.config.get("altromtype") == "cass"
+                    or (softList != "" and softList[-4:] == "cass")
+                ):
+                    autoRunCmd = 'LOADM”“,,R\\n'
+                    autoRunDelay = 5
             elif system.name == "coco":
                 romType = 'cart'
                 autoRunDelay = 2
 
                 # if using software list, use "usage" for autoRunCmd (if provided)
                 if softList != "":
-                    softListFile = '/usr/bin/mame/hash/{}.xml'.format(softList)
-                    if os.path.exists(softListFile):
+                    softListFile = Path(f'/usr/bin/mame/hash/{softList}.xml')
+                    if softListFile.exists():
                         softwarelist = ET.parse(softListFile)
                         for software in softwarelist.findall('software'):
-                            if software.attrib != {}:
-                                if software.get('name') == romDrivername:
-                                    for info in software.iter('info'):
-                                        if info.get('name') == 'usage':
-                                            autoRunCmd = info.get('value') + '\\n'
+                            if software.attrib and software.get('name') == romDrivername:
+                                for info in software.iter('info'):
+                                    if info.get('name') == 'usage':
+                                        autoRunCmd = f'{info.get('value')}\\n'
 
                 # if still undefined, default autoRunCmd based on media type
                 if autoRunCmd == "":
-                    if (system.isOptSet('altromtype') and system.config["altromtype"] == "cass") or (softList != "" and softList.endswith("cass")) or romExt.casefold() == ".cas":
+                    if altromtype == "cass" or (softList and softList.endswith("cass")) or rom.suffix.casefold() == ".cas":
                         romType = 'cass'
                         if romDrivername.casefold().endswith(".bas"):
                             autoRunCmd = 'CLOAD:RUN\\n'
                         else:
                             autoRunCmd = 'CLOADM:EXEC\\n'
-                    if (system.isOptSet('altromtype') and system.config["altromtype"] == "flop1") or (softList != "" and softList.endswith("flop")) or romExt.casefold() == ".dsk":
+                    if altromtype == "flop1" or (softList and softList.endswith("flop")) or rom.suffix.casefold() == ".dsk":
                         romType = 'flop'
                         if romDrivername.casefold().endswith(".bas"):
-                            autoRunCmd = 'RUN \"{}\"\\n'.format(romDrivername)
+                            autoRunCmd = f'RUN \"{romDrivername}\"\\n'
                         else:
-                            autoRunCmd = 'LOADM \"{}\":EXEC\\n'.format(romDrivername)
+                            autoRunCmd = f'LOADM \"{romDrivername}\":EXEC\\n'
 
                 # check for a user override
-                autoRunFile = 'system/configs/mame/autoload/{}_{}_autoload.csv'.format(system.name, romType)
-                if os.path.exists(autoRunFile):
-                    openARFile = open(autoRunFile, 'r')
-                    with openARFile:
+                autoRunFile = CONFIGS / 'mame' / 'autoload' / f'{system.name}_{romType}_autoload.csv'
+                if autoRunFile.exists():
+                    with autoRunFile.open() as openARFile:
                         autoRunList = csv.reader(openARFile, delimiter=';', quotechar="'")
                         for row in autoRunList:
-                            if row and not row[0].startswith('#'):
-                                if row[0].casefold() == romDrivername.casefold():
+                            if row and not row[0].startswith('#') and row[0].casefold() == romDrivername.casefold():
+                                autoRunCmd = row[1] + "\\n"
+            elif system.name == "atom":
+                autoRunDelay = 2
+                autoRunCmd = messAutoRun[messMode]
+                floppy_extensions = [
+                    ".mfi", ".dfi", ".hfe", ".mfm", ".td0", ".imd", ".d77", ".d88",
+                    ".1dd", ".cqm", ".cqi", ".dsk", ".40t"
+                ]
+                is_compressed_flop = False
+                romExt = rom.suffix.lower()
+                if romExt == ".zip":
+                    try:
+                        with zipfile.ZipFile(rom, 'r') as zip_ref:
+                            for filename_in_zip in zip_ref.namelist():
+                                if Path(filename_in_zip).suffix.lower() in floppy_extensions:
+                                    is_compressed_flop = True
+                                    break
+                    except zipfile.BadZipFile:
+                        pass # Ignore bad zip files
+                elif romExt == ".7z":
+                    _7z_executable = "/usr/bin/7z"
+                    try:
+                        proc = subprocess.run([_7z_executable, "l", "-ba", str(rom)], capture_output=True, text=True, check=False)
+                        if proc.returncode == 0:
+                            for line in proc.stdout.splitlines():
+                                if Path(line.strip()).suffix.lower() in floppy_extensions:
+                                    is_compressed_flop = True
+                                    break
+                    except FileNotFoundError:
+                        pass # Ignore if 7z is not found
+                is_flop_media = (
+                    (altromtype == "flop1") or
+                    (softList and softList.endswith("flop")) or
+                    (romExt in floppy_extensions) or
+                    is_compressed_flop
+                )
+                if is_flop_media:
+                    autoRunFile = DEFAULTS_DIR / 'data' / 'mame' / 'atom_flop_autoload.csv'
+                    if autoRunFile.exists():
+                        with autoRunFile.open() as openARFile:
+                            autoRunList = csv.reader(openARFile, delimiter=';', quotechar="'")
+                            for row in autoRunList:
+                                if row and not row[0].startswith('#') and row[0].casefold() == rom.stem.casefold():
                                     autoRunCmd = row[1] + "\\n"
+                                    break          
             else:
                 # Check for an override file, otherwise use generic (if it exists)
                 autoRunCmd = messAutoRun[messMode]
-                autoRunFile = '/usr/share/batocera/configgen/data/mame/' + softList + '_autoload.csv'
-                if os.path.exists(autoRunFile):
-                    openARFile = open(autoRunFile, 'r')
-                    with openARFile:
+                autoRunFile = DEFAULTS_DIR / 'data' / 'mame' / f'{softList}_autoload.csv'
+                if autoRunFile.exists():
+                    with autoRunFile.open() as openARFile:
                         autoRunList = csv.reader(openARFile, delimiter=';', quotechar="'")
                         for row in autoRunList:
-                            if row[0].casefold() == os.path.splitext(romBasename)[0].casefold():
+                            if row[0].casefold() == rom.stem.casefold():
                                 autoRunCmd = row[1] + "\\n"
                                 autoRunDelay = 3
-            commandLine += [ '-inipath', '/userdata/saves/mame/mame/ini/' ]
+
+            inipath = SAVES / 'mame' / 'mame' / 'ini'
+            commandLine += [ '-inipath', f'"{inipath}"' ]
             if autoRunCmd != "":
                 if autoRunCmd.startswith("'"):
                     autoRunCmd.replace("'", "")
-                iniFile = open('/userdata/saves/mame/mame/ini/batocera.ini', "w")
+                iniFile = (SAVES / 'mame' / 'mame' / 'ini' / 'batocera.ini').open("w")
                 iniFile.write('autoboot_command          ' + autoRunCmd + "\n")
                 iniFile.write('autoboot_delay            ' + str(autoRunDelay))
                 iniFile.close()
             # Create & add a blank disk if needed, insert into drive 2
             # or drive 1 if drive 2 is selected manually.
-            if system.isOptSet('addblankdisk') and system.getOptBoolean('addblankdisk'):
-                if not os.path.exists('/userdata/saves/lr-mess/{}/{}.dsk'.format(system.name, os.path.splitext(romBasename)[0])):
-                    os.makedirs('/userdata/saves/lr-mess/{}/'.format(system.name))
-                    shutil.copy2('/usr/share/mame/blank.dsk', '/userdata/saves/lr-mess/{}/{}.dsk'.format(system.name, os.path.splitext(romBasename)[0]))
-                if system.isOptSet('altromtype') and system.config['altromtype'] == 'flop2':
-                    commandLine += [ '-flop1', '/userdata/saves/lr-mess/{}/{}.dsk'.format(system.name, os.path.splitext(romBasename)[0]) ]
+            if system.config.get_bool('addblankdisk'):
+                lr_mess_dsk = SAVES / 'lr-mess' / system.name / rom.stem
+                if not lr_mess_dsk.exists():
+                    lr_mess_dsk.parent.mkdir(parents=True)
+                    shutil.copy2('/usr/share/mame/blank.dsk', lr_mess_dsk)
+                if altromtype == 'flop2':
+                    commandLine += [ '-flop1', f'"{lr_mess_dsk}"' ]
                 else:
-                    commandLine += [ '-flop2', '/userdata/saves/lr-mess/{}/{}.dsk'.format(system.name, os.path.splitext(romBasename)[0]) ]
+                    commandLine += [ '-flop2', f'"{lr_mess_dsk}"' ]
 
     # Lightgun reload option
-    if system.isOptSet('offscreenreload') and system.getOptBoolean('offscreenreload'):
+    if system.config.get_bool('offscreenreload'):
         commandLine += [ "-offscreen_reload" ]
 
     # Art paths - lr-mame displays artwork in the game area and not in the bezel area, so using regular MAME artwork + shaders is not recommended.
     # By default, will ignore standalone MAME's art paths.
-    if system.config['core'] != 'same_cdi':
-        if not (system.isOptSet("sharemameart") and not system.getOptBoolean('sharemameart')):
-            artPath = "/var/run/mame_artwork/;/usr/bin/mame/artwork/;/userdata/bios/lr-mame/artwork/;/userdata/bios/mame/artwork/;/userdata/decorations/"
+    if system.config.core != 'same_cdi':
+        if system.config.get_bool("sharemameart", True):
+            artPath = f"/var/run/mame_artwork/;/usr/bin/mame/artwork/;{BIOS / 'lr-mame' / 'artwork'};{BIOS / 'mame' / 'artwork'};{USER_DECORATIONS}"
         else:
-            artPath = "/var/run/mame_artwork/;/usr/bin/mame/artwork/;/userdata/bios/lr-mame/artwork/"
-        if not system.name == "ti99":
-            commandLine += [ '-artpath', artPath ]
+            artPath = f"/var/run/mame_artwork/;/usr/bin/mame/artwork/;{BIOS / 'lr-mame' / 'artwork'}"
+        if system.name != "ti99":
+            commandLine += [ '-artpath', f'"{artPath}"' ]
 
     # Artwork crop - default to On for lr-mame
     # Exceptions for PDP-1 (status lights) and VGM Player (indicators)
-    if not system.isOptSet("artworkcrop"):
-        if not system.name in [ 'pdp1', 'vgmplay', 'ti99' ]:
+    if "artworkcrop" not in system.config:
+        if system.name not in [ 'pdp1', 'vgmplay', 'ti99' ]:
             commandLine += [ "-artwork_crop" ]
     else:
-        if system.getOptBoolean("artworkcrop"):
+        if system.config.get_bool("artworkcrop"):
             commandLine += [ "-artwork_crop" ]
 
-    # Share plugins & samples with standalone MAME (except TI99)
-    if not system.name == "ti99":
-        commandLine += [ "-pluginspath", "/usr/bin/mame/plugins/;/userdata/saves/mame/plugins" ]
-        commandLine += [ "-homepath" , "/userdata/saves/mame/plugins/" ]
-        commandLine += [ "-samplepath", "/userdata/bios/mame/samples/" ]
-    if not os.path.exists("/userdata/saves/mame/plugins/"):
-        os.makedirs("/userdata/saves/mame/plugins/")
-    if not os.path.exists("/userdata/bios/mame/samples/"):
-        os.makedirs("/userdata/bios/mame/samples/")
+    # Share plugins with standalone MAME (except TI99)
+    if system.name != "ti99":
+        commandLine += [ "-pluginspath", f"/usr/bin/mame/plugins/;{SAVES / 'mame' / 'plugins'}" ]
+        commandLine += [ "-homepath" , SAVES / 'mame' / 'plugins' ]
+    # Share samples with standalone MAME (except gamecom and TI99)
+    if system.name not in ['gamecom', 'ti99']:
+        commandLine += [ "-samplepath", BIOS / "mame" / "samples" ]
+    mkdir_if_not_exists(SAVES / "mame" / "plugins")
+    mkdir_if_not_exists(BIOS / "mame" / "samples")
 
     # Delete old cmd files & prepare path
-    cmdPath = "/var/run/cmdfiles/"
-    if not os.path.exists(cmdPath):
-        os.makedirs(cmdPath)
-    cmdFileList = os.listdir(cmdPath)
-    for file in cmdFileList:
-        if file.endswith(".cmd"):
-            os.remove(os.path.join(cmdPath, file))
+    cmdPath = Path("/var/run/cmdfiles")
+    mkdir_if_not_exists(cmdPath)
+    for file in cmdPath.iterdir():
+        if file.suffix == ".cmd":
+            file.unlink()
 
     # Write command line file
-    cmdFilename = "{}{}.cmd".format(cmdPath, romDrivername)
-    cmdFile = open(cmdFilename, "w")
-    cmdFile.write(' '.join(commandLine))
-    cmdFile.close()
+    cmdFilename = cmdPath / f"{romDrivername}.cmd"
+    # Check to see whether user provided a custom cmd file at the default location
+    if Path(defaultCustomCmdFilepath := f"{rom}.cmd").is_file():
+        shutil.copyfile(defaultCustomCmdFilepath, cmdFilename)
+    else:
+        # User did not provide a custom .cmd file. Use the logic above to create a new .cmd file
+        cmdFile = cmdFilename.open("w")
+        cmdFile.write(' '.join(str(item) for item in commandLine))
+        cmdFile.close()
 
     # Call Controller Config
     if messMode == -1:
-        generateMAMEPadConfig(cfgPath, playersControllers, system, "", romBasename, specialController, guns)
+        generateMAMEPadConfig(cfgPath, playersControllers, system, "", rom, specialController, guns)
     else:
-        generateMAMEPadConfig(cfgPath, playersControllers, system, messModel, romBasename, specialController, guns)
+        generateMAMEPadConfig(cfgPath, playersControllers, system, messModel, rom, specialController, guns)
 
-def prepSoftwareList(subdirSoftList, softList, softDir, hashDir, romDirname):
-    if not os.path.exists(softDir):
-        os.makedirs(softDir)
+def prepSoftwareList(subdirSoftList: Sequence[str], softList: str, softDir: Path, hashDir: Path, romParent: Path):
+    mkdir_if_not_exists(softDir)
     # Check for/remove existing symlinks, remove hashfile folder
-    for fileName in os.listdir(softDir):
-        checkFile = os.path.join(softDir, fileName)
-        if os.path.islink(checkFile):
-            os.unlink(checkFile)
-        if os.path.isdir(checkFile):
+    for checkFile in softDir.iterdir():
+        if checkFile.is_symlink():
+            checkFile.unlink()
+        if checkFile.is_dir():
             shutil.rmtree(checkFile)
     # Prepare hashfile path
-    if not os.path.exists(hashDir):
-        os.makedirs(hashDir)
+    mkdir_if_not_exists(hashDir)
     # Remove existing xml files
-    hashFiles = os.listdir(hashDir)
-    for file in hashFiles:
-        if file.endswith(".xml"):
-            os.remove(os.path.join(hashDir, file))
+    for file in hashDir.iterdir():
+        if file.suffix == ".xml":
+            file.unlink()
     # Copy hashfile
-    shutil.copy2("/usr/bin/mame/hash/" + softList + ".xml", hashDir + "/" + softList + ".xml")
+    shutil.copy2(Path("/usr/bin/mame/hash") / f"{softList}.xml", hashDir / f"{softList}.xml")
     # Link ROM's parent folder if needed, ROM's folder otherwise
     if softList in subdirSoftList:
-        romPath = Path(romDirname)
-        os.symlink(str(romPath.parents[0]), softDir + softList, True)
+        (softDir / softList).symlink_to(romParent.parent, target_is_directory=True)
     else:
-        os.symlink(romDirname, softDir + softList, True)
+        (softDir / softList).symlink_to(romParent, target_is_directory=True)
 
-def getMameControlScheme(system, romBasename):
+def getMameControlScheme(system: Emulator, rom: Path) -> str:
     # Game list files
-    mameCapcom = '/usr/share/batocera/configgen/data/mame/mameCapcom.txt'
-    mameKInstinct = '/usr/share/batocera/configgen/data/mame/mameKInstinct.txt'
-    mameMKombat = '/usr/share/batocera/configgen/data/mame/mameMKombat.txt'
-    mameNeogeo = '/usr/share/batocera/configgen/data/mame/mameNeogeo.txt'
-    mameTwinstick = '/usr/share/batocera/configgen/data/mame/mameTwinstick.txt'
-    mameRotatedstick = '/usr/share/batocera/configgen/data/mame/mameRotatedstick.txt'
+    mame_data_dir = DEFAULTS_DIR / 'data' / 'mame'
+    mameCapcom = mame_data_dir / 'mameCapcom.txt'
+    mameKInstinct = mame_data_dir / 'mameKInstinct.txt'
+    mameMKombat = mame_data_dir / 'mameMKombat.txt'
+    mameNeogeo = mame_data_dir / 'mameNeogeo.txt'
+    mameTwinstick = mame_data_dir / 'mameTwinstick.txt'
+    mameRotatedstick = mame_data_dir / 'mameRotatedstick.txt'
 
     # Controls for games with 5-6 buttons or other unusual controls
-    if system.isOptSet("altlayout"):
-        controllerType = system.config["altlayout"] # Option was manually selected
-    else:
-        controllerType = "auto"
+    controllerType = system.config.get("altlayout", "auto")
 
     if controllerType in [ "default", "neomini", "neocd", "twinstick", "qbert" ]:
         return controllerType
-    else:
-        capcomList = set(open(mameCapcom).read().split())
-        mkList = set(open(mameMKombat).read().split())
-        kiList = set(open(mameKInstinct).read().split())
-        neogeoList = set(open(mameNeogeo).read().split())
-        twinstickList = set(open(mameTwinstick).read().split())
-        qbertList = set(open(mameRotatedstick).read().split())
 
-        romName = os.path.splitext(romBasename)[0]
-        if romName in capcomList:
-            if controllerType in [ "auto", "snes" ]:
-                return "sfsnes"
-            elif controllerType == "megadrive":
-                return "megadrive"
-            elif controllerType == "fightstick":
-                return "sfstick"
-        elif romName in mkList:
-            if controllerType in [ "auto", "snes" ]:
-                return "mksnes"
-            elif controllerType == "megadrive":
-                return "mkmegadrive"
-            elif controllerType == "fightstick":
-                return "mkstick"
-        elif romName in kiList:
-            if controllerType in [ "auto", "snes" ]:
-                return "kisnes"
-            elif controllerType == "megadrive":
-                return "megadrive"
-            elif controllerType == "fightstick":
-                return "sfstick"
-        elif romName in  neogeoList:
-            return "neomini"
-        elif romName in  twinstickList:
-            return "twinstick"
-        elif romName in  qbertList:
-            return "qbert"
-        else:
-            if controllerType == "fightstick":
-                return "fightstick"
+    capcomList = set(mameCapcom.read_text().split())
+    mkList = set(mameMKombat.read_text().split())
+    kiList = set(mameKInstinct.read_text().split())
+    neogeoList = set(mameNeogeo.read_text().split())
+    twinstickList = set(mameTwinstick.read_text().split())
+    qbertList = set(mameRotatedstick.read_text().split())
+
+    romName = rom.stem
+    if romName in capcomList:
+        if controllerType in [ "auto", "snes" ]:
+            return "sfsnes"
+        if controllerType == "megadrive":
+            return "megadrive"
+        if controllerType == "fightstick":
+            return "sfstick"
+    elif romName in mkList:
+        if controllerType in [ "auto", "snes" ]:
+            return "mksnes"
+        if controllerType == "megadrive":
+            return "mkmegadrive"
+        if controllerType == "fightstick":
+            return "mkstick"
+    elif romName in kiList:
+        if controllerType in [ "auto", "snes" ]:
+            return "kisnes"
+        if controllerType == "megadrive":
+            return "megadrive"
+        if controllerType == "fightstick":
+            return "sfstick"
+    elif romName in  neogeoList:
+        return "neomini"
+    elif romName in  twinstickList:
+        return "twinstick"
+    elif romName in  qbertList:
+        return "qbert"
+    else:
+        if controllerType == "fightstick":
+            return "fightstick"
 
     return "default"
 
-def generateMAMEPadConfig(cfgPath, playersControllers, system, messSysName, romBasename, specialController, guns):
+def generateMAMEPadConfig(
+    cfgPath: Path,
+    playersControllers: Controllers,
+    system: Emulator,
+    messSysName: str,
+    rom: Path,
+    specialController: str,
+    guns: Guns,
+) -> None:
     # config file
     config = minidom.Document()
-    configFile = cfgPath + "default.cfg"
-    if os.path.exists(configFile):
+    configFile = cfgPath / "default.cfg"
+    if configFile.exists():
         try:
-            config = minidom.parse(configFile)
-        except:
+            config = minidom.parse(str(configFile))
+        except Exception:
             pass # reinit the file
 
-    if system.isOptSet('customcfg'):
-        customCfg = system.getOptBoolean('customcfg')
-    else:
-        customCfg = False
+    customCfg = system.config.get_bool('customcfg')
+
     # Don't overwrite if using custom configs
-    if os.path.exists(configFile) and customCfg:
+    if configFile.exists() and customCfg:
         overwriteMAME = False
     else:
         overwriteMAME = True
 
     # Get controller scheme
-    altButtons = getMameControlScheme(system, romBasename)
+    altButtons = getMameControlScheme(system, rom)
 
     # Load standard controls from csv
-    controlFile = '/usr/share/batocera/configgen/data/mame/mameControls.csv'
-    openFile = open(controlFile, 'r')
-    controlDict = {}
-    with openFile:
+    controlFile = DEFAULTS_DIR / 'data' / 'mame' / 'mameControls.csv'
+    controlDict: dict[str, dict[str, str]] = {}
+    with controlFile.open() as openFile:
         controlList = csv.reader(openFile)
         for row in controlList:
-            if not row[0] in controlDict.keys():
+            if row[0] not in controlDict:
                 controlDict[row[0]] = {}
             controlDict[row[0]][row[1]] = row[2]
 
     # Common controls
-    mappings = {}
-    for controlDef in controlDict['default'].keys():
+    mappings: dict[str, str] = {}
+    for controlDef in controlDict['default']:
         mappings[controlDef] = controlDict['default'][controlDef]
 
     # Buttons that change based on game/setting
     if altButtons in controlDict:
-        for controlDef in controlDict[altButtons].keys():
+        for controlDef in controlDict[altButtons]:
             mappings.update({controlDef: controlDict[altButtons][controlDef]})
 
     xml_mameconfig = getRoot(config, "mameconfig")
@@ -615,18 +656,22 @@ def generateMAMEPadConfig(cfgPath, playersControllers, system, messSysName, romB
     else:
         useControls = messSysName
 
+    config_alt: minidom.Document | None = None
+    xml_input_alt: minidom.Element | None = None
+    overwriteSystem = True
+    configFile_alt: Path | None = None
+
     # Open or create alternate config file for systems with special controllers/settings
     # If the system/game is set to per game config, don't try to open/reset an existing file, only write if it's blank or going to the shared cfg folder
     specialControlList = [ "cdimono1", "apfm1000", "astrocde", "adam", "arcadia", "gamecom", "tutor", "crvision", "bbcb", "bbcm", "bbcm512", "bbcmc", "xegs", \
         "socrates", "vgmplay", "pdp1", "vc4000", "fmtmarty", "gp32", "apple2p", "apple2e", "apple2ee" ]
     if messSysName in specialControlList:
         # Load mess controls from csv
-        messControlFile = '/usr/share/batocera/configgen/data/mame/messControls.csv'
-        openMessFile = open(messControlFile, 'r')
-        with openMessFile:
+        messControlFile = DEFAULTS_DIR / 'data' / 'mame' / 'messControls.csv'
+        with messControlFile.open() as openMessFile:
             controlList = csv.reader(openMessFile, delimiter=';')
             for row in controlList:
-                if not row[0] in messControlDict.keys():
+                if row[0] not in messControlDict:
                     messControlDict[row[0]] = {}
                 messControlDict[row[0]][row[1]] = {}
                 currentEntry = messControlDict[row[0]][row[1]]
@@ -658,23 +703,21 @@ def generateMAMEPadConfig(cfgPath, playersControllers, system, messSysName, romB
                     currentEntry['mask'] = row[10]
                     currentEntry['default'] = row[11]
                 if currentEntry['reversed'] == 'False':
-                    currentEntry['reversed'] == False
+                    currentEntry['reversed'] = False
                 else:
-                    currentEntry['reversed'] == True
+                    currentEntry['reversed'] = True
 
         config_alt = minidom.Document()
-        configFile_alt = cfgPath + messSysName + ".cfg"
-        if os.path.exists(configFile_alt):
+        configFile_alt = cfgPath / f"{messSysName}.cfg"
+        if configFile_alt.exists():
             try:
-                config_alt = minidom.parse(configFile_alt)
-            except:
+                config_alt = minidom.parse(str(configFile_alt))
+            except Exception:
                 pass # reinit the file
 
-        perGameCfg = system.getOptBoolean('pergamecfg')
-        if os.path.exists(configFile_alt) and (customCfg or perGameCfg):
+        perGameCfg = system.config.get_bool('pergamecfg')
+        if configFile_alt.exists() and (customCfg or perGameCfg):
             overwriteSystem = False
-        else:
-            overwriteSystem = True
 
         xml_mameconfig_alt = getRoot(config_alt, "mameconfig")
         xml_mameconfig_alt.setAttribute("version", "10")
@@ -704,13 +747,11 @@ def generateMAMEPadConfig(cfgPath, playersControllers, system, messSysName, romB
             xml_input_alt.appendChild(xml_kbenable_alt)
 
     # Don't configure pads if guns are present and "use_guns" is on
-    if system.isOptSet('use_guns') and system.getOptBoolean('use_guns') and len(guns) > 0:
+    if system.config.use_guns and guns:
         return
 
     # Fill in controls on cfg files
-    nplayer = 1
-    maxplayers = len(playersControllers)
-    for playercontroller, pad in sorted(playersControllers.items()):
+    for nplayer, pad in enumerate(playersControllers, start=1):
         mappings_use = mappings
         if "joystick1up" not in pad.inputs:
             mappings_use["JOYSTICK_UP"] = "up"
@@ -737,10 +778,10 @@ def generateMAMEPadConfig(cfgPath, playersControllers, system, messSysName, romB
             xml_input.appendChild(generateComboPortElement(pad, config, 'standard', pad.index, "UI_RIGHT", "RIGHT", mappings_use["JOYSTICK_RIGHT"], retroPad[mappings_use["JOYSTICK_RIGHT"]], False, "", "")) # Right
             xml_input.appendChild(generateComboPortElement(pad, config, 'standard', pad.index, "UI_SELECT", "ENTER", 'a', retroPad['a'], False, "", ""))                                                     # Select
 
-        if useControls in messControlDict.keys():
-            for controlDef in messControlDict[useControls].keys():
+        if useControls in messControlDict:
+            for controlDef in messControlDict[useControls]:
                 thisControl = messControlDict[useControls][controlDef]
-                if nplayer == thisControl['player']:
+                if nplayer == thisControl['player'] and xml_input_alt is not None and config_alt is not None:
                     if thisControl['type'] == 'special':
                         xml_input_alt.appendChild(generateSpecialPortElement(pad, config_alt, thisControl['tag'], nplayer, pad.index, thisControl['key'], thisControl['mapping'], \
                             retroPad[mappings_use[thisControl['useMapping']]], thisControl['reversed'], thisControl['mask'], thisControl['default']))
@@ -755,23 +796,22 @@ def generateMAMEPadConfig(cfgPath, playersControllers, system, messSysName, romB
                         xml_input_alt.appendChild(generateComboPortElement(pad, config_alt, thisControl['tag'], pad.index, thisControl['key'], thisControl['kbMapping'], thisControl['mapping'], \
                             retroPad[mappings_use[thisControl['useMapping']]], thisControl['reversed'], thisControl['mask'], thisControl['default']))
 
-        nplayer = nplayer + 1
 
         # save the config file
         #mameXml = open(configFile, "w")
         # TODO: python 3 - workawround to encode files in utf-8
         if overwriteMAME:
-            mameXml = codecs.open(configFile, "w", "utf-8")
-            dom_string = os.linesep.join([s for s in config.toprettyxml().splitlines() if s.strip()]) # remove ugly empty lines while minicom adds them...
-            mameXml.write(dom_string)
+            with codecs.open(str(configFile), "w", "utf-8") as mameXml:
+                dom_string = os.linesep.join([s for s in config.toprettyxml().splitlines() if s.strip()]) # remove ugly empty lines while minicom adds them...
+                mameXml.write(dom_string)
 
         # Write alt config (if used, custom config is turned off or file doesn't exist yet)
-        if messSysName in specialControlList and overwriteSystem:
-            mameXml_alt = codecs.open(configFile_alt, "w", "utf-8")
-            dom_string_alt = os.linesep.join([s for s in config_alt.toprettyxml().splitlines() if s.strip()]) # remove ugly empty lines while minicom adds them...
-            mameXml_alt.write(dom_string_alt)
+        if messSysName in specialControlList and overwriteSystem and config_alt is not None and configFile_alt is not None:
+            with codecs.open(str(configFile_alt), "w", "utf-8") as mameXml_alt:
+                dom_string_alt = os.linesep.join([s for s in config_alt.toprettyxml().splitlines() if s.strip()]) # remove ugly empty lines while minicom adds them...
+                mameXml_alt.write(dom_string_alt)
 
-def reverseMapping(key):
+def reverseMapping(key: str) -> str | None:
     if key == "joystick1down":
         return "joystick1up"
     if key == "joystick1right":
@@ -782,7 +822,7 @@ def reverseMapping(key):
         return "joystick2left"
     return None
 
-def generatePortElement(pad, config, nplayer, padindex, mapping, key, input, reversed, altButtons):
+def generatePortElement(pad: Controller, config: minidom.Document, nplayer: int, padindex: int, mapping: str, key: str, input: str, reversed: bool, altButtons: str):
     # Generic input
     xml_port = config.createElement("port")
     xml_port.setAttribute("type", f"P{nplayer}_{mapping}")
@@ -793,7 +833,7 @@ def generatePortElement(pad, config, nplayer, padindex, mapping, key, input, rev
     xml_newseq.appendChild(value)
     return xml_port
 
-def generateSpecialPortElement(pad, config, tag, nplayer, padindex, mapping, key, input, reversed, mask, default):
+def generateSpecialPortElement(pad: Controller, config: minidom.Document, tag: str, nplayer: int, padindex: int, mapping: str, key: str, input: str, reversed: bool, mask: str, default: str):
     # Special button input (ie mouse button to gamepad)
     xml_port = config.createElement("port")
     xml_port.setAttribute("tag", tag)
@@ -803,11 +843,14 @@ def generateSpecialPortElement(pad, config, tag, nplayer, padindex, mapping, key
     xml_newseq = config.createElement("newseq")
     xml_newseq.setAttribute("type", "standard")
     xml_port.appendChild(xml_newseq)
-    value = config.createTextNode(input2definition(pad, key, input, padindex + 1, reversed, 0))
+    txt = input2definition(pad, key, input, padindex + 1, reversed, 0)
+    if mapping == "COIN" + str(nplayer) and nplayer == 1:
+        txt = txt + f" OR KEYCODE_{nplayer}_F{nplayer + 11}" # f12 for player 1
+    value = config.createTextNode(txt)
     xml_newseq.appendChild(value)
     return xml_port
 
-def generateComboPortElement(pad, config, tag, padindex, mapping, kbkey, key, input, reversed, mask, default):
+def generateComboPortElement(pad: Controller, config: minidom.Document, tag: str, padindex: int, mapping: str, kbkey: str, key: str, input: str, reversed: bool, mask: str, default: str):
     # Maps a keycode + button - for important keyboard keys when available
     xml_port = config.createElement("port")
     xml_port.setAttribute("tag", tag)
@@ -821,7 +864,7 @@ def generateComboPortElement(pad, config, tag, padindex, mapping, kbkey, key, in
     xml_newseq.appendChild(value)
     return xml_port
 
-def generateAnalogPortElement(pad, config, tag, nplayer, padindex, mapping, inckey, deckey, mappedinput, mappedinput2, reversed, mask, default, delta, axis = ''):
+def generateAnalogPortElement(pad: Controller, config: minidom.Document, tag: str, nplayer: int, padindex: int, mapping: str, inckey: str, deckey: str, mappedinput: str, mappedinput2: str, reversed: bool, mask: str, default: str, delta: str, axis: str = ''):
     # Mapping analog to digital (mouse, etc)
     xml_port = config.createElement("port")
     xml_port.setAttribute("tag", tag)
@@ -845,62 +888,61 @@ def generateAnalogPortElement(pad, config, tag, nplayer, padindex, mapping, inck
     if axis == '':
         stdvalue = config.createTextNode("NONE")
     else:
-        stdvalue = config.createTextNode("JOYCODE_{}_{}".format(padindex + 1, axis))
+        stdvalue = config.createTextNode(f"JOYCODE_{padindex + 1}_{axis}")
     xml_newseq_std.appendChild(stdvalue)
     return xml_port
 
-def input2definition(pad, key, input, joycode, reversed, altButtons, ignoreAxis = False):
+def input2definition(pad: Controller, key: str, input: str, joycode: int, reversed: bool, altButtons: str | int, ignoreAxis: bool = False) -> str:
     if input.find("BUTTON") != -1 or input.find("HAT") != -1 or input == "START" or input == "SELECT":
         input = input.format(joycode) if "{0}" in input else input
         return f"JOYCODE_{joycode}_{input}"
-    elif input.find("AXIS") != -1:
+    if input.find("AXIS") != -1:
         if altButtons == "qbert": # Q*Bert Joystick
             if key == "joystick1up" or key == "up":
                 return f"JOYCODE_{joycode}_{retroPad['joystick1up']}_{joycode}_{retroPad['joystick1right']} OR \
                     JOYCODE_{joycode}_{retroPad['up'].format(joycode)} JOYCODE_{joycode}_{retroPad['right'].format(joycode)}"
-            elif key == "joystick1down" or key == "down":
+            if key == "joystick1down" or key == "down":
                 return f"JOYCODE_{joycode}_{retroPad['joystick1down']} JOYCODE_{joycode}_{retroPad['joystick1left']} OR \
                     JOYCODE_{joycode}_{retroPad['down'].format(joycode)} JOYCODE_{joycode}_{retroPad['left'].format(joycode)}"
-            elif key == "joystick1left" or key == "left":
+            if key == "joystick1left" or key == "left":
                 return f"JOYCODE_{joycode}_{retroPad['joystick1left']} JOYCODE_{joycode}_{retroPad['joystick1up']} OR \
                     JOYCODE_{joycode}_{retroPad['left'].format(joycode)} JOYCODE_{joycode}_{retroPad['up'].format(joycode)}"
-            elif key == "joystick1right" or key == "right":
+            if key == "joystick1right" or key == "right":
                 return f"JOYCODE_{joycode}_{retroPad['joystick1right']} JOYCODE_{joycode}_{retroPad['joystick1down']} OR \
                     JOYCODE_{joycode}_{retroPad['right'].format(joycode)} JOYCODE_{joycode}_{retroPad['down'].format(joycode)}"
-            else:
-                return f"JOYCODE_{joycode}_{input}"
-        elif ignoreAxis:
+            return f"JOYCODE_{joycode}_{input}"
+
+        if ignoreAxis:
             if key == "joystick1up" or key == "up":
                 return f"JOYCODE_{joycode}_{retroPad['up'].format(joycode)}"
-            elif key == "joystick1down" or key == "down":
+            if key == "joystick1down" or key == "down":
                 return f"JOYCODE_{joycode}_{retroPad['down'].format(joycode)}"
-            elif key == "joystick1left" or key == "left":
+            if key == "joystick1left" or key == "left":
                 return f"JOYCODE_{joycode}_{retroPad['left'].format(joycode)}"
-            elif key == "joystick1right" or key == "right":
+            if key == "joystick1right" or key == "right":
                 return f"JOYCODE_{joycode}_{retroPad['right'].format(joycode)}"
         else:
             if key == "joystick1up" or key == "up":
                 return f"JOYCODE_{joycode}_{retroPad[key]} OR JOYCODE_{joycode}_{retroPad['up'].format(joycode)}"
-            elif key == "joystick1down" or key == "down":
+            if key == "joystick1down" or key == "down":
                 return f"JOYCODE_{joycode}_{retroPad[key]} OR JOYCODE_{joycode}_{retroPad['down'].format(joycode)}"
-            elif key == "joystick1left" or key == "left":
+            if key == "joystick1left" or key == "left":
                 return f"JOYCODE_{joycode}_{retroPad[key]} OR JOYCODE_{joycode}_{retroPad['left'].format(joycode)}"
-            elif key == "joystick1right" or key == "right":
+            if key == "joystick1right" or key == "right":
                 return f"JOYCODE_{joycode}_{retroPad[key]} OR JOYCODE_{joycode}_{retroPad['right'].format(joycode)}"
-            elif(key == "joystick2up"):
+            if key == "joystick2up":
                 return f"JOYCODE_{joycode}_{retroPad[key]} OR JOYCODE_{joycode}_{retroPad['x']}"
-            elif(key == "joystick2down"):
+            if key == "joystick2down":
                 return f"JOYCODE_{joycode}_{retroPad[key]} OR JOYCODE_{joycode}_{retroPad['b']}"
-            elif(key == "joystick2left"):
+            if key == "joystick2left":
                 return f"JOYCODE_{joycode}_{retroPad[key]} OR JOYCODE_{joycode}_{retroPad['y']}"
-            elif(key == "joystick2right"):
+            if key == "joystick2right":
                 return f"JOYCODE_{joycode}_{retroPad[key]} OR JOYCODE_{joycode}_{retroPad['a']}"
-            else:
-                return f"JOYCODE_{joycode}_{input}"
-    else:
-        return "unknown"
 
-def getRoot(config, name):
+            return f"JOYCODE_{joycode}_{input}"
+    return "unknown"
+
+def getRoot(config: minidom.Document, name: str, /) -> minidom.Element:
     xml_section = config.getElementsByTagName(name)
 
     if len(xml_section) == 0:
@@ -911,7 +953,7 @@ def getRoot(config, name):
 
     return xml_section
 
-def getSection(config, xml_root, name):
+def getSection(config: minidom.Document, xml_root: minidom.Element, name: str, /) -> minidom.Element:
     xml_section = xml_root.getElementsByTagName(name)
 
     if len(xml_section) == 0:
@@ -922,9 +964,9 @@ def getSection(config, xml_root, name):
 
     return xml_section
 
-def removeSection(config, xml_root, name):
+def removeSection(config: minidom.Document, xml_root: minidom.Element, name: str, /) -> None:
     xml_section = xml_root.getElementsByTagName(name)
 
-    for i in range(0, len(xml_section)):
+    for i in range(len(xml_section)):
         old = xml_root.removeChild(xml_section[i])
         old.unlink()

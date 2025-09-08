@@ -1,76 +1,78 @@
-#!/usr/bin/env python
-import Command
-from generators.Generator import Generator
-import controllersConfig
+from __future__ import annotations
+
+import logging
 import os
-import batoceraFiles
 import subprocess
+from pathlib import Path
+from typing import TYPE_CHECKING
 
-corsixthConfigPath = batoceraFiles.CONF + "/corsixth"
-corsixthConfigFile = corsixthConfigPath + "/config.txt"
-corsixthSavesPath = "/userdata/saves/corsixth"
-corsixthDataPath = "/userdata/roms/corsixth"
-corsixthFontPath = "/usr/share/fonts/dejavu/DejaVuSans.ttf"
-corsixthScreenshotsPath = "/userdata/screenshots"
+from ... import Command
+from ...batoceraPaths import CONFIGS, ROMS, SAVES, SCREENSHOTS, mkdir_if_not_exists
+from ...controller import generate_sdl_game_controller_config
+from ..Generator import Generator
 
-from utils.logger import get_logger
-eslog = get_logger(__name__)
+if TYPE_CHECKING:
+    from ...types import HotkeysContext
+
+corsixthConfigPath = CONFIGS / "corsixth"
+corsixthConfigFile = corsixthConfigPath / "config.txt"
+corsixthSavesPath = SAVES / "corsixth"
+corsixthDataPath = ROMS / "corsixth"
+corsixthFontPath = Path("/usr/share/fonts/dejavu/DejaVuSans.ttf")
+
+_logger = logging.getLogger(__name__)
 
 class CorsixTHGenerator(Generator):
 
+    def getHotkeysContext(self) -> HotkeysContext:
+        return {
+            "name": "corsixth",
+            "keys": { "exit": ["KEY_LEFTALT", "KEY_F4"], "menu": ["KEY_RIGHTSHIFT", "KEY_Q"], "reset": ["KEY_RIGHTSHIFT", "KEY_F10"],
+                      "save_state": ["KEY_LEFTALT", "KEY_LEFTSHIFT", "KEY_S"], "restore_state": ["KEY_LEFTALT", "KEY_LEFTSHIFT", "KEY_L"] }
+        }
+
     def generate(self, system, rom, playersControllers, metadata, guns, wheels, gameResolution):
         # Create corsixth config directory if needed
-        if not os.path.exists(corsixthConfigPath):
-            os.makedirs(corsixthConfigPath)
+        mkdir_if_not_exists(corsixthConfigPath)
 
         # Create corsixth savesg directory if needed
-        if not os.path.exists(corsixthSavesPath):
-            os.makedirs(corsixthSavesPath)
+        mkdir_if_not_exists(corsixthSavesPath)
 
         # Check game data is installed
         try:
-            os.chdir("/userdata/roms/corsixth/ANIMS/")
-            os.chdir("/userdata/roms/corsixth/DATA/")
-            os.chdir("/userdata/roms/corsixth/INTRO/")
-            os.chdir("/userdata/roms/corsixth/LEVELS/")
-            os.chdir("/userdata/roms/corsixth/QDATA/")
-        except:
-            eslog.error("ERROR: Game assets not installed. You can get them from the game Theme Hospital.")
+            os.chdir(corsixthDataPath / "ANIMS")
+            os.chdir(corsixthDataPath / "DATA")
+            os.chdir(corsixthDataPath / "INTRO")
+            os.chdir(corsixthDataPath / "LEVELS")
+            os.chdir(corsixthDataPath / "QDATA")
+        except Exception:
+            _logger.error("ERROR: Game assets not installed. You can get them from the game Theme Hospital.")
 
         # If config file already exists, delete it
-        if os.path.exists(corsixthConfigFile):
-            os.unlink(corsixthConfigFile)
+        if corsixthConfigFile.exists():
+            corsixthConfigFile.unlink()
 
         # Create the config file and fill it with basic data
-        source_config_file = open(corsixthConfigFile, "w")
+        source_config_file = corsixthConfigFile.open("w")
         source_config_file.write("check_for_updates = false\n")
-        source_config_file.write("theme_hospital_install = [[" + corsixthDataPath +"]]\n")
-        source_config_file.write("unicode_font = [[" + corsixthFontPath + "]]\n")
-        source_config_file.write("savegames = [[" + corsixthSavesPath + "]]\n")
-        source_config_file.write("screenshots = [[" + corsixthScreenshotsPath +"]]\n")
+        source_config_file.write(f"theme_hospital_install = [[{corsixthDataPath!s}]]\n")
+        source_config_file.write(f"unicode_font = [[{corsixthFontPath!s}]]\n")
+        source_config_file.write(f"savegames = [[{corsixthSavesPath!s}]]\n")
+        source_config_file.write(f"screenshots = [[{SCREENSHOTS!s}]]\n")
 
         # Values coming from ES configuration : Resolution
         source_config_file.write("fullscreen = true\n")
-        source_config_file.write("width = " + str(gameResolution["width"]) +"\n")
-        source_config_file.write("height = " + str(gameResolution["height"]) + "\n")
+        source_config_file.write(f"width = {gameResolution['width']}\n")
+        source_config_file.write(f"height = {gameResolution['height']}\n")
 
         # Values coming from ES configuration : New Graphics
-        if system.isOptSet('cth_new_graphics'):
-          source_config_file.write("use_new_graphics = "+ system.config['cth_new_graphics'] +"\n")
-        else:
-          source_config_file.write("use_new_graphics = true\n")
+        source_config_file.write(f"use_new_graphics = {system.config.get('cth_new_graphics', 'true')}\n")
 
         # Values coming from ES configuration : Sandbox Mode
-        if system.isOptSet('cth_free_build_mode'):
-          source_config_file.write("free_build_mode = "+ system.config['cth_free_build_mode'] +"\n")
-        else:
-          source_config_file.write("free_build_mode = false\n")
+        source_config_file.write(f"free_build_mode = {system.config.get('cth_free_build_mode', 'false')}\n")
 
         # Values coming from ES configuration : Intro Movie
-        if system.isOptSet('cth_play_intro'):
-          source_config_file.write("play_intro = "+ system.config['cth_play_intro'] +"\n")
-        else:
-          source_config_file.write("play_intro = true\n")
+        source_config_file.write(f"play_intro = {system.config.get('cth_play_intro', 'true')}\n")
 
         # Now auto-set the language from batocera ES locale
         language_mapping = {
@@ -105,25 +107,25 @@ class CorsixTHGenerator(Generator):
         # 2. Map it
         corsixthLanguage = language_mapping.get(language, 'en')
         # 3. Write it
-        source_config_file.write("language = [[" + corsixthLanguage +"]]\n")
+        source_config_file.write(f"language = [[{corsixthLanguage}]]\n")
 
         # Check custom music is installed
         try:
-            os.chdir(corsixthDataPath +"/MP3")
-            source_config_file.write("audio_music = [[" + corsixthDataPath + "/MP3" +"]]\n")
-        except:
-            eslog.warning("NOTICE: Audio & Music system loaded, but found no external background tracks. Missing MP3 folder")
+            os.chdir(corsixthDataPath / "MP3")
+            source_config_file.write(f"audio_music = [[{corsixthDataPath / 'MP3'}]]\n")
+        except Exception:
+            _logger.warning("NOTICE: Audio & Music system loaded, but found no external background tracks. Missing MP3 folder")
             source_config_file.write("audio_music = nil\n")
 
         # Close config file as we are done
         source_config_file.close()
 
         # Launch engine with config file path
-        commandArray = ["corsix-th", "--config-file=" + corsixthConfigFile]
+        commandArray = ["corsix-th", f"--config-file={corsixthConfigFile}"]
 
         return Command.Command(
             array=commandArray,
             env={
-                'SDL_GAMECONTROLLERCONFIG': controllersConfig.generateSdlGameControllerConfig(playersControllers)
+                'SDL_GAMECONTROLLERCONFIG': generate_sdl_game_controller_config(playersControllers)
             }
         )

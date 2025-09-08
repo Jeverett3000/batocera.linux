@@ -1,40 +1,51 @@
-#!/usr/bin/env python
+from __future__ import annotations
 
-import Command
-from generators.Generator import Generator
-import controllersConfig
-import os
 import codecs
+from typing import TYPE_CHECKING
+
+from ... import Command
+from ...batoceraPaths import CONFIGS, SAVES, mkdir_if_not_exists
+from ...controller import Controller
+from ..Generator import Generator
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from ...controller import Controllers
+    from ...types import HotkeysContext
+
 
 class EasyRPGGenerator(Generator):
 
+    def getHotkeysContext(self) -> HotkeysContext:
+        return {
+            "name": "easyrpg",
+            "keys": { "exit": ["KEY_LEFTALT", "KEY_F4"], "menu": "KEY_F9", "pause": "KEY_ESC", "restore_state": "KEY_F12", "save_state": "KEY_F11", "rewind": "KEY_F" }
+        }
+
     def generate(self, system, rom, playersControllers, metadata, guns, wheels, gameResolution):
-        commandArray = ["easyrpg-player"]
+        commandArray: list[str | Path] = ["easyrpg-player"]
 
         # FPS
-        if system.isOptSet("showFPS") and system.getOptBoolean("showFPS"):
+        if system.config.show_fps:
             commandArray.append("--show-fps")
 
         # Test Play (Debug Mode)
-        if system.isOptSet('testplay') and system.getOptBoolean("testplay"):
+        if system.config.get_bool('testplay'):
             commandArray.append("--test-play")
 
         # Game Region (Encoding)
-        if system.isOptSet('encoding') and system.config["encoding"] != 'autodetect':
-            commandArray.extend(["--encoding", system.config["encoding"]])
-        else:
-            commandArray.extend(["--encoding", "auto"])
+        encoding = system.config.get('encoding', 'auto')
+        commandArray.extend(["--encoding", encoding if encoding != 'autodetect' else 'auto'])
 
         # Save directory
-        savePath = f"/userdata/saves/easyrpg/{os.path.basename(rom)}"
-        if not os.path.exists(savePath):
-            os.makedirs(savePath)
+        savePath = SAVES / "easyrpg" / rom.name
+        mkdir_if_not_exists(savePath)
         commandArray.extend(["--save-path", savePath])
 
         # Dir for logs and conf
-        configdir = "/userdata/system/configs/easyrpg"
-        if not os.path.exists(configdir):
-            os.makedirs(configdir)
+        configdir = CONFIGS / "easyrpg"
+        mkdir_if_not_exists(configdir)
 
         commandArray.extend(["--project-path", rom])
 
@@ -43,8 +54,8 @@ class EasyRPGGenerator(Generator):
         return Command.Command(array=commandArray)
 
     @staticmethod
-    def padConfig(configdir, playersControllers):
-        keymapping = {
+    def padConfig(configdir: Path, playersControllers: Controllers) -> None:
+        keymapping: dict[str, str | None] = {
             "button_up": None,
             "button_down": None,
             "button_left": None,
@@ -71,17 +82,12 @@ class EasyRPGGenerator(Generator):
             "button_debug_through": None
         }
 
-        configFileName = "{}/{}".format(configdir, "config.ini")
-        f = codecs.open(configFileName, "w", encoding="ascii")
-        f.write("[Joypad]\n");
-        nplayer = 1
-        for playercontroller, pad in sorted(playersControllers.items()):
-            if nplayer == 1:
-                f.write("number={}\n" .format(pad.index))
-                for key in keymapping:
+        with codecs.open(str(configdir / "config.ini"), "w", encoding="ascii") as f:
+            f.write("[Joypad]\n")
+            if pad := Controller.find_player_number(playersControllers, 1):
+                f.write(f"number={pad.index}\n" )
+                for key, value in keymapping.items():
                     button = -1
-                    if keymapping[key] is not None:
-                        if pad.inputs[keymapping[key]].type == "button":
-                            button = pad.inputs[keymapping[key]].id
+                    if value is not None and pad.inputs[value].type == "button":
+                        button = pad.inputs[value].id
                     f.write(f"{key}={button}\n")
-            nplayer += 1

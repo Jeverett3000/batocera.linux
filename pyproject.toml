@@ -1,0 +1,31 @@
+[tool.pyright]
+exclude = [".venv*", "buildroot*", "output", "dl"]
+stubPath = "python-stubs"
+
+pythonVersion = "3.12"
+pythonPlatform = "Linux"
+
+strictListInference = true
+strictDictionaryInference = true
+strictSetInference = true
+reportMissingModuleSource = "none"
+reportDeprecated = "warning"
+
+[tool.ruff]
+extend-exclude = [".venv*", "buildroot*", "output", "dl"]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+preview = true
+explicit-preview-rules = true
+select = [
+    "TCH", "PYI", "I", "UP", "F", "E", "W", "B", "C4", "SIM", "PTH", "G", "PERF", "PIE", "RET", "RUF"
+]
+ignore = ["SIM105", "SIM108", "E501", "RUF051"]
+
+[tool.ruff.lint.isort]
+extra-standard-library = ["typing_extensions", "_typeshed"]
+known-first-party = ["configgen"]
+combine-as-imports = true
+required-imports = ["from __future__ import annotations"]

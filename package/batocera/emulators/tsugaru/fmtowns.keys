@@ -50,22 +50,6 @@
             "target": "KEY_F10"
         },
         {
-            "trigger": [
-                "hotkey",
-                "start"
-            ],
-            "type": "key",
-            "target": [ "KEY_LEFTALT", "KEY_F4" ]
-        },
-        {
-            "trigger": [
-                "hotkey",
-                "a"
-            ],
-            "type": "key",
-            "target": "KEY_F10"
-        },
-        {
             "trigger": "joystick1up",
             "type": "key",
             "target": "KEY_UP"

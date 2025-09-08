@@ -4,7 +4,7 @@
 #
 ################################################################################
 
-FLATPAK_VERSION = 1.12.8
+FLATPAK_VERSION = 1.12.9
 FLATPAK_SOURCE = flatpak-$(FLATPAK_VERSION).tar.xz
 FLATPAK_SITE = https://github.com/flatpak/flatpak/releases/download/$(FLATPAK_VERSION)
 
@@ -30,10 +30,6 @@ define FLATPAK_INSTALL_SCRIPTS
 	    $(TARGET_DIR)/usr/share/emulationstation/hooks/preupdate-gamelists-flatpak
 	ln -sf /usr/bin/batocera-steam-update \
 	    $(TARGET_DIR)/usr/share/emulationstation/hooks/preupdate-gamelists-steam
-	#evmap config
-	mkdir -p $(TARGET_DIR)/usr/share/evmapy
-	cp -f $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/utils/flatpak/*.keys \
-	    $(TARGET_DIR)/usr/share/evmapy
 endef
 
 FLATPAK_POST_INSTALL_TARGET_HOOKS += FLATPAK_INSTALL_SCRIPTS

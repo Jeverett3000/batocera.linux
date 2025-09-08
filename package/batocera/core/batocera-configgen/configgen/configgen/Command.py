@@ -1,17 +1,22 @@
-#!/usr/bin/env python
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+    from pathlib import Path
 
 class Command:
-    def __init__(self, array, env=dict()):
-        self.array = array
-        self.env = env
-        
+    def __init__(self, array: Sequence[str | Path], env: Mapping[str, str | Path] | None = None):
+        self.array = list(array)
+        self.env = dict(env) if env else {}
+
     def __str__(self):
-        str = list()
+        strings: list[str] = []
 
         for varName, varValue in self.env.items():
-            str.append("%s=%s" % (varName, varValue))
-            
-        for value in self.array:
-            str.append(value)
+            strings.append(f"{varName}={varValue}")
 
-        return " ".join(str)
+        strings.extend(f"{value}" for value in self.array)
+
+        return " ".join(strings)

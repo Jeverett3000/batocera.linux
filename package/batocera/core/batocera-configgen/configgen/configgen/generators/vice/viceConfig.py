@@ -1,41 +1,44 @@
-#!/usr/bin/env python
+from __future__ import annotations
 
-import batoceraFiles
-import os
-from Emulator import Emulator
-import configparser
-import controllersConfig
+from typing import TYPE_CHECKING, Final
 
-def setViceConfig(viceConfigFile, system, metadata, guns, rom):
-    
+from ...batoceraPaths import mkdir_if_not_exists
+from ...utils.configparser import CaseSensitiveRawConfigParser
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+    from io import TextIOWrapper
+    from pathlib import Path
+
+    from ...Emulator import Emulator
+    from ...gun import Guns
+
+
+_SYSTEM_CORE_MAP: Final = {
+    'x64': 'C64',
+    'x64dtv': 'C64DTV',
+    'xplus4': 'PLUS4',
+    'xscpu64': 'SCPU64',
+    'xvic': 'VIC20',
+    'xpet': 'PET',
+}
+
+
+def setViceConfig(vice_config_dir: Path, system: Emulator, metadata: Mapping[str, str], guns: Guns, rom: Path) -> None:
+
     # Path
-    viceController = viceConfigFile + "/sdl-joymap.vjm"
-    viceConfigRC   = viceConfigFile + "/sdl-vicerc"
+    viceController = vice_config_dir / "sdl-joymap.vjm"
+    viceConfigRC   = vice_config_dir / "sdl-vicerc"
 
-    if not os.path.exists(os.path.dirname(viceConfigRC)):
-            os.makedirs(os.path.dirname(viceConfigRC))
+    mkdir_if_not_exists(viceConfigRC.parent)
 
     # config file
-    viceConfig = configparser.RawConfigParser(interpolation=None)
-    viceConfig.optionxform=str
-    
-    if os.path.exists(viceConfigRC):
+    viceConfig = CaseSensitiveRawConfigParser(interpolation=None)
+
+    if viceConfigRC.exists():
         viceConfig.read(viceConfigRC)
 
-    if(system.config['core'] == 'x64'):
-        systemCore = "C64"    
-    elif(system.config['core'] == 'x64dtv'):
-        systemCore = "C64DTV"    
-    elif(system.config['core'] == 'xplus4'):
-        systemCore = "PLUS4"    
-    elif(system.config['core'] == 'xscpu64'):
-        systemCore = "SCPU64"    
-    elif(system.config['core'] == 'xvic'):
-       systemCore = "VIC20"    
-    elif(system.config['core'] == 'xpet'):
-       systemCore = "PET"    
-    else:
-        systemCore = "C128"
+    systemCore = _SYSTEM_CORE_MAP.get(system.config.core, 'C128')
 
     if not viceConfig.has_section(systemCore):
         viceConfig.add_section(systemCore)
@@ -43,44 +46,45 @@ def setViceConfig(viceConfigFile, system, metadata, guns, rom):
     viceConfig.set(systemCore, "SaveResourcesOnExit",    "0")
     viceConfig.set(systemCore, "SoundDeviceName",        "alsa")
 
-    if system.isOptSet('noborder') and system.getOptBoolean('noborder') == True:
-        viceConfig.set(systemCore, "SDLGLAspectMode",        "0")
-        viceConfig.set(systemCore, "VICBorderMode",        "3")
+    if system.config.get_bool('noborder'):
+        aspect_mode = "0"
+        border_mode = "3"
     else:
-        viceConfig.set(systemCore, "SDLGLAspectMode",        "2")
-        viceConfig.set(systemCore, "VICBorderMode",        "0")
+        aspect_mode = "2"
+        border_mode = "0"
+    viceConfig.set(systemCore, "SDLGLAspectMode",        aspect_mode)
+    viceConfig.set(systemCore, "VICBorderMode",        border_mode)
+
     viceConfig.set(systemCore, "VICFullscreen",        "1")
-    if system.isOptSet('use_guns') and system.getOptBoolean('use_guns') and len(guns) >= 1:
-        if "gun_type" in metadata and metadata["gun_type"] == "stack_light_rifle":
-            viceConfig.set(systemCore, "JoyPort1Device",             "15")
+
+    if system.config.use_guns and guns:
+        if metadata.get("gun_type") == "stack_light_rifle":
+            joyport1 = "15"
         else:
-            viceConfig.set(systemCore, "JoyPort1Device",             "14")
+            joyport1 = "14"
     else:
-        viceConfig.set(systemCore, "JoyPort1Device",             "1")
+        joyport1 = "1"
+    viceConfig.set(systemCore, "JoyPort1Device",             joyport1)
+
     viceConfig.set(systemCore, "JoyDevice1",             "4")
-    if not systemCore == "VIC20":
+    if systemCore != "VIC20":
         viceConfig.set(systemCore, "JoyDevice2",             "4")
-    viceConfig.set(systemCore, "JoyMapFile",  viceController)
+    viceConfig.set(systemCore, "JoyMapFile",  str(viceController))
 
     # custom : allow the user to configure directly sdl-vicerc via batocera.conf via lines like : vice.section.option=value
-    for user_config in system.config:
-        if user_config[:5] == "vice.":
-            section_option = user_config[5:]
-            section_option_splitter = section_option.find(".")
-            custom_section = section_option[:section_option_splitter]
-            custom_option = section_option[section_option_splitter+1:]
-            if not viceConfig.has_section(custom_section):
-                viceConfig.add_section(custom_section)
-            viceConfig.set(custom_section, custom_option, system.config[user_config])
+    for section_option, user_config_value in system.config.items(starts_with='vice.'):
+        custom_section, _, custom_option = section_option.partition(".")
+        if not viceConfig.has_section(custom_section):
+            viceConfig.add_section(custom_section)
+        viceConfig.set(custom_section, custom_option, user_config_value)
 
     # update the configuration file
-    with open(viceConfigRC, 'w') as configfile:
+    with viceConfigRC.open('w') as configfile:
         viceConfig.write(EqualsSpaceRemover(configfile))
 
 class EqualsSpaceRemover:
-    output_file = None
-    def __init__( self, new_output_file ):
+    def __init__(self, new_output_file: TextIOWrapper):
         self.output_file = new_output_file
 
-    def write( self, what ):
+    def write(self, what: str):
         self.output_file.write( what.replace( " = ", "=", 1 ) )

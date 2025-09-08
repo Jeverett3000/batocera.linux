@@ -1,26 +1,28 @@
-#!/usr/bin/env python
+from __future__ import annotations
 
-from .logger import get_logger
+import logging
 import subprocess
 
-eslog = get_logger(__name__)
+_logger = logging.getLogger(__name__)
 
 class batoceraServices:
 
-    def isServiceEnabled(name):
+    @staticmethod
+    def isServiceEnabled(name: str):
         proc = subprocess.Popen(["batocera-services list"], stdout=subprocess.PIPE, shell=True)
-        (out, err) = proc.communicate()
+        (out, _) = proc.communicate()
         for valmod in out.decode().splitlines():
             vals = valmod.split(";")
             if(name == vals[0] and vals[1] == "*"):
-                eslog.debug(f"service {name} is enabled")
+                _logger.debug("service %s is enabled", name)
                 return True
-        eslog.debug(f"service {name} is disabled")
+        _logger.debug("service %s is disabled", name)
         return False
 
-    def getServiceStatus(name):
-        proc = subprocess.Popen(["batocera-services status \"" + name + "\""], stdout=subprocess.PIPE, shell=True)
-        (out, err) = proc.communicate()
+    @staticmethod
+    def getServiceStatus(name: str):
+        proc = subprocess.Popen([f'batocera-services status "{name}"'], stdout=subprocess.PIPE, shell=True)
+        (out, _) = proc.communicate()
         val = out.decode().strip()
-        eslog.debug(f"service {name} status : \"" + val + "\"") # strip any end of lines
+        _logger.debug('service %s status : "%s"', name, val) # strip any end of lines
         return val

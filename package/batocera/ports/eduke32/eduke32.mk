@@ -3,8 +3,8 @@
 # eduke32
 #
 ################################################################################
-# Version: Commits on Jul 25, 2024
-EDUKE32_VERSION = 19c21b9ab10b0c17147c9ad951cc15279ed33f77
+# Version: Commits on Dec 26, 2024
+EDUKE32_VERSION = 8d79c372acdb00155c75f3b6ca914b852d689b0d
 EDUKE32_SITE = https://voidpoint.io/terminx/eduke32/-/archive/$(EDUKE32_VERSION)
 EDUKE32_DEPENDENCIES = sdl2 flac libvpx
 EDUKE32_LICENSE = GPL-2.0
@@ -27,11 +27,6 @@ endef
 define EDUKE32_INSTALL_TARGET_CMDS
     $(INSTALL) -D -m 0755 $(@D)/eduke32 $(TARGET_DIR)/usr/bin/eduke32
     $(INSTALL) -D -m 0755 $(@D)/fury $(TARGET_DIR)/usr/bin/fury
-    mkdir -p $(TARGET_DIR)/usr/share/evmapy
-    cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/ports/eduke32/eduke32.keys \
-        $(TARGET_DIR)/usr/share/evmapy
-    cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/ports/eduke32/eduke32.keys \
-        $(TARGET_DIR)/usr/share/evmapy/fury.keys
 endef
 
 $(eval $(generic-package))

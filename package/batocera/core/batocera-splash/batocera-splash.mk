@@ -1,18 +1,16 @@
 ################################################################################
 #
-# Batocera splash
+# batocera-splash
 #
 ################################################################################
-BATOCERA_SPLASH_VERSION = 5.4
+
+BATOCERA_SPLASH_VERSION = 5.6
 BATOCERA_SPLASH_SOURCE=
 
 BATOCERA_SPLASH_TGVERSION=$(BATOCERA_SYSTEM_VERSION) $(BATOCERA_SYSTEM_DATE)
 
 # video or image
-ifeq ($(BR2_PACKAGE_BATOCERA_SPLASH_OMXPLAYER),y)
-    BATOCERA_SPLASH_SCRIPT=Ssplash-omx
-    BATOCERA_SPLASH_MEDIA=video
-else ifeq ($(BR2_PACKAGE_BATOCERA_SPLASH_MPV),y)
+ifeq ($(BR2_PACKAGE_BATOCERA_SPLASH_MPV),y)
     BATOCERA_SPLASH_SCRIPT=Ssplash-mpv
     BATOCERA_SPLASH_MEDIA=video
 else
@@ -23,13 +21,20 @@ endif
 # MPV options
 ifeq ($(BR2_PACKAGE_BATOCERA_SPLASH_MPV),y)
     ifeq ($(BR2_PACKAGE_BATOCERA_TARGET_X86_64_ANY),y)
-        # drm doesn't work on my nvidia card. sdl run smoothly.
+        # drm doesn't work on my nvidia card. sdl runs smoothly.
         BATOCERA_SPLASH_PLAYER_OPTIONS=--vo=drm,sdl --hwdec=yes
-    else ifeq ($(BR2_PACKAGE_BATOCERA_TARGET_AMLOGIC_ANY)$(BR2_PACKAGE_BATOCERA_RPI_ANY)$(BR2_PACKAGE_BATOCERA_TARGET_RK3326)$(BR2_PACKAGE_BATOCERA_TARGET_RK3399)$(BR2_PACKAGE_BATOCERA_TARGET_RK3128)$(BR2_PACKAGE_BATOCERA_TARGET_H6)$(BR2_PACKAGE_BATOCERA_TARGET_H616)$(BR2_PACKAGE_BATOCERA_TARGET_RK3588),y)
-        # hwdec=yes doesnt work for n2
+    else ifeq ($(BR2_PACKAGE_BATOCERA_TARGET_RK3568),y)
+        # use v4l2request-copy for the VeriSilicon Hantro decoder
+        BATOCERA_SPLASH_PLAYER_OPTIONS=--vo=drm,sdl --hwdec=v4l2request-copy
+    else ifeq ($(BR2_PACKAGE_BATOCERA_TARGET_SM8550),y)
+        # use v4l2m2m-copy for the Iris decoder
+        BATOCERA_SPLASH_PLAYER_OPTIONS=--vo=drm,sdl --hwdec=v4l2m2m-copy
+    else ifeq ($(BR2_PACKAGE_ROCKCHIP_RGA)$(BR2_PACKAGE_BATOCERA_TARGET_SM8250),y)
+        BATOCERA_SPLASH_PLAYER_OPTIONS=--vo=drm,sdl --hwdec=auto
+    else ifeq ($(BR2_PACKAGE_BATOCERA_TARGET_AMLOGIC_ANY)$(BR2_PACKAGE_BATOCERA_RPI_ANY)$(BR2_PACKAGE_BATOCERA_TARGET_RK3399)$(BR2_PACKAGE_BATOCERA_TARGET_H6)$(BR2_PACKAGE_BATOCERA_TARGET_H616)$(BR2_PACKAGE_BATOCERA_TARGET_T527),y)
         BATOCERA_SPLASH_PLAYER_OPTIONS=
     else
-        BATOCERA_SPLASH_PLAYER_OPTIONS=--hwdec=yes
+        BATOCERA_SPLASH_PLAYER_OPTIONS=--hwdec=auto
     endif
 endif
 
@@ -67,7 +72,7 @@ endef
 define BATOCERA_SPLASH_INSTALL_BOOT_LOGO
     mkdir -p $(TARGET_DIR)/usr/share/batocera/splash
     cp "$(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/core/batocera-splash/images/logo.png"      "${TARGET_DIR}/usr/share/batocera/splash/boot-logo.png"
-    cp "$(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/core/batocera-splash/images/logo-half.png"      "${TARGET_DIR}/usr/share/batocera/splash/boot-logo-half.png"
+    cp "$(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/core/batocera-splash/images/logo-half.png" "${TARGET_DIR}/usr/share/batocera/splash/boot-logo-half.png"
     cp "$(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/core/batocera-splash/images/logo-240.png"  "${TARGET_DIR}/usr/share/batocera/splash/boot-logo-320x240.png"
     cp "$(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/core/batocera-splash/images/logo-480p.png" "${TARGET_DIR}/usr/share/batocera/splash/boot-logo-640x480.png"
     cp "$(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/core/batocera-splash/images/logo-720p.png" "${TARGET_DIR}/usr/share/batocera/splash/boot-logo-1280x720.png"

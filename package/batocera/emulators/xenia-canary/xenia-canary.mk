@@ -3,10 +3,11 @@
 # xenia-canary
 #
 ################################################################################
-# Version: Commits on Sep 1, 2024
-XENIA_CANARY_SOURCE = xenia_canary.zip
-XENIA_CANARY_VERSION = ed843f3
-XENIA_CANARY_SITE = https://github.com/xenia-canary/xenia-canary/releases/download/$(XENIA_CANARY_VERSION)
+# Version: Commits on June 10, 2025
+XENIA_CANARY_SOURCE = xenia_canary_windows.zip
+XENIA_CANARY_VERSION = 1d7973a
+XENIA_CANARY_SITE = \
+    https://github.com/xenia-canary/xenia-canary-releases/releases/download/$(XENIA_CANARY_VERSION)
 XENIA_CANARY_LICENSE = BSD
 XENIA_CANARY_LICENSE_FILE = LICENSE
 
@@ -42,10 +43,6 @@ define XENIA_CANARY_POST_PROCESS
 	
 	# Clean up the temporary directory
 	rm -rf $(@D)/temp
-
-	mkdir -p $(TARGET_DIR)/usr/share/evmapy
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/xenia-canary/xbox360.xenia-canary.keys \
-	    $(TARGET_DIR)/usr/share/evmapy
 endef
 
 XENIA_CANARY_PRE_DOWNLOAD_HOOKS = XENIA_CANARY_CLEAR_DL

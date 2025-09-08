@@ -13,9 +13,14 @@ DUCKSTATION_SUPPORTS_IN_SOURCE_BUILD = NO
 
 DUCKSTATION_DEPENDENCIES += fmt boost ffmpeg libcurl ecm stenzek-shaderc
 DUCKSTATION_DEPENDENCIES += qt6base qt6tools qt6svg libbacktrace cpuinfo
-DUCKSTATION_DEPENDENCIES += spirv-cross libsoundtouch webp
+DUCKSTATION_DEPENDENCIES += spirv-cross libsoundtouch webp host-clang
 
-DUCKSTATION_CONF_OPTS  = -DCMAKE_BUILD_TYPE=Release
+# Use clang for performance
+DUCKSTATION_CONF_OPTS += -DCMAKE_C_COMPILER=$(HOST_DIR)/bin/clang
+DUCKSTATION_CONF_OPTS += -DCMAKE_CXX_COMPILER=$(HOST_DIR)/bin/clang++
+DUCKSTATION_CONF_OPTS += -DCMAKE_EXE_LINKER_FLAGS="-no-pie -lm -lstdc++"
+
+DUCKSTATION_CONF_OPTS += -DCMAKE_BUILD_TYPE=Release
 DUCKSTATION_CONF_OPTS += -DBUILD_SHARED_LIBS=FALSE
 DUCKSTATION_CONF_OPTS += -DBUILD_QT_FRONTEND=ON
 DUCKSTATION_CONF_OPTS += -DSHADERC_INCLUDE_DIR=$(STAGING_DIR)/stenzek-shaderc/include
@@ -35,9 +40,9 @@ else
 endif
 
 # currently duckstation build fails if you set vulkan off when headers & loader are present
-#ifeq ($(BR2_PACKAGE_BATOCERA_VULKAN),y)
 ifeq ($(BR2_PACKAGE_VULKAN_HEADERS)$(BR2_PACKAGE_VULKAN_LOADER),yy)
     DUCKSTATION_CONF_OPTS += -DENABLE_VULKAN=ON
+    DUCKSTATION_DEPENDENCIES += vulkan-headers vulkan-loader
 else
     DUCKSTATION_CONF_OPTS += -DENABLE_VULKAN=OFF
 endif
@@ -52,10 +57,6 @@ define DUCKSTATION_INSTALL_TARGET_CMDS
     cp -R $(@D)/buildroot-build/bin/resources \
         $(TARGET_DIR)/usr/share/duckstation/
     rm -f $(TARGET_DIR)/usr/share/duckstation/resources/gamecontrollerdb.txt
-
-    mkdir -p $(TARGET_DIR)/usr/share/evmapy
-    cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/duckstation/psx.duckstation.keys \
-        $(TARGET_DIR)/usr/share/evmapy
 endef
 
 define DUCKSTATION_TRANSLATIONS

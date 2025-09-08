@@ -7,7 +7,7 @@ DEFAULT="/usr/share/batocera/splash/splash.mp4"
 SPLASH_DIR=/userdata/splash
 
 FM_IMAGE=".*\.\(jpg\|jpeg\|png\)"
-FM_VIDEO=".*\.\(mp4\|MP4\)"
+FM_VIDEO=".*\.\(mp4\)"
 
 . /etc/profile.d/xdg.sh
 . /etc/profile.d/dbus.sh
@@ -32,7 +32,7 @@ do_filerandomize ()
 {
     local array
     [[ -d "$SPLASH_DIR" ]] || return 1
-    readarray -t array < <(find "$SPLASH_DIR" -maxdepth 1 -regex "$1" -type f)
+    readarray -t array < <(find "$SPLASH_DIR" -maxdepth 1 -iregex "$1" -type f)
     if [[ ${#array[@]} -gt 0 ]]; then
         echo "${array[$RANDOM % ${#array[@]}]}"
     fi
@@ -58,7 +58,7 @@ do_imagestart()
     printf 'Image: %s: ' "$image"
     if test -e /dev/fb0
     then
-        start-stop-daemon -S -b -q -m -p /var/run/user-splash-image.pid --exec fbv -- -f -i "$image"
+        start-stop-daemon -S -b -q -m -p /var/run/user-splash-image.pid --exec /usr/bin/fbv -- -f -i "$image"
     fi
 }
 
@@ -123,10 +123,21 @@ do_videostart ()
 
     drm_mode="preferred"
     video_resize=$(batocera-settings-get-master splash.screen.resize)
-    if [[ $? -eq 0 ]]; then
-        resize=$(echo "${video_resize}" | sed "s/x/:/")
+    # If splash screen resize is empty then try the es resolution
+    if [[ -z "$video_resize" ]]; then
+        video_resize=$(batocera-settings-get-master es.resolution)
+    fi
+    if [[ -n "$video_resize" ]]; then
+        resolution_only="${video_resize%%.*}"
+        if [[ "${video_rotation}" -eq 90 || "${video_rotation}" -eq 270 ]]; then
+            # invert the resolution
+            width="${resolution_only%x*}"
+            height="${resolution_only#*x}"
+            resolution_only="${height}x${width}"
+        fi
+        resize="${resolution_only/x/:}"
         mpv_video="${mpv_video} --vf=scale=${resize}"
-        drm_mode=$video_resize
+        drm_mode=$resolution_only
     fi
     
     video_subtitle=$(batocera-settings-get splash.screen.subtitle)
@@ -164,6 +175,15 @@ do_videostart ()
     # set the sound again due to drm init causing some cards to default to 40% volume
     VOLUME=$(/usr/bin/batocera-settings-get audio.volume)
     batocera-audio setSystemVolume "${VOLUME}"
+
+    # On some systems, the graphics driver may take an extra moment to become fully
+    # ready after detection. Check for a user-configurable delay.
+    splash_delay=$(batocera-settings-get splash.delay)
+
+    # Check if the setting was found and is a number greater than 0
+    if [[ "${splash_delay}" =~ ^[0-9]+$ ]] && [ "${splash_delay}" -gt 0 ]; then
+        sleep "${splash_delay}"
+    fi
 
     if [ -n "$drm_connector" ] && [ -n "$card_path" ]; then
         start-stop-daemon -S -b -q -m -p /var/run/user-splash.pid --exec /usr/bin/mpv -- --really-quiet --no-config %PLAYER_OPTIONS% --drm-mode=$drm_mode --drm-connector=$drm_connector --drm-device=$card_path --log-file=/userdata/system/logs/mpv.log $mpv_audio $mpv_video "$video"

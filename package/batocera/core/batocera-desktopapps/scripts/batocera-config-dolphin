@@ -5,13 +5,12 @@
 
 if test -z "${DISPLAY}"
 then
-    export DISPLAY=:0.0
+    export DISPLAY=$(getLocalXDisplay)
 fi
 
 if [[ -x /usr/bin/dolphin-emu ]]; then
     XDG_CONFIG_HOME=/userdata/system/configs \
         XDG_DATA_HOME=/userdata/saves \
-        QT_QPA_PLATFORM=xcb \
         /usr/bin/dolphin-emu
 else
     echo "System not found."

@@ -19,8 +19,8 @@ default:
   emulator: libretro
   core:     opera
 3ds:
-  emulator: citra
-  core:     citra
+  emulator: azahar
+  core:     azahar
 abuse:
   emulator: abuse
   core:     abuse
@@ -92,9 +92,12 @@ atomiswave:
 bbc:
   emulator: libretro
   core:     mame
-boom3:
+bennugd:
   emulator: libretro
-  core:     boom3
+  core:     bennugd
+bstone:
+  emulator: bstone
+  core:     bstone
 c64:
   emulator: libretro
   core:     vice_x64
@@ -110,15 +113,15 @@ c20:
 camplynx:
   emulator: libretro
   core:     mame
+catacomb:
+  emulator: catacombgl
+  core:     catacombgl
 cannonball:
   emulator: cannonball
   core:     cannonball
 cavestory:
   emulator: libretro
   core:     nxengine
-cave3rd:
-  emulator: demul
-  core:     demul
 cdi:
   emulator: mame
   core:     mame
@@ -137,6 +140,9 @@ coco:
 colecovision:
   emulator: libretro
   core:     bluemsx
+commanderx16:
+  emulator: x16emu
+  core:     x16emu
 corsixth:
   emulator: corsixth
   core:     corsixth
@@ -156,6 +162,12 @@ daphne:
 devilutionx:
   emulator: devilutionx
   core:     devilutionx
+dice:
+  emulator: libretro
+  core:     dice
+doom3:
+  emulator: dhewm3
+  core:     dhewm3
 dos:
   emulator: libretro
   core:     dosbox_pure
@@ -211,9 +223,6 @@ fmtowns:
 fury:
   emulator: eduke32
   core:     fury
-gaelco:
-  emulator: demul
-  core:     demul
 gamate:
   emulator: libretro
   core:     mame
@@ -269,9 +278,6 @@ hcl:
   core:     hcl
   options:
     bezel: none
-hikaru:
-  emulator: demul
-  core:     demul
 hurrican:
   emulator: hurrican
   core:     hurrican
@@ -291,6 +297,18 @@ iortcw:
 jaguar:
   emulator: libretro
   core:     virtualjaguar
+jaguarcd:
+  emulator: libretro
+  core:     virtualjaguar
+jazz2:
+  emulator: jazz2-native
+  core:     jazz2-native
+jkdf2:
+  emulator: openjkdf2
+  core:     openjkdf2
+jknight:
+  emulator: openjk
+  core:     openjk
 kodi:
   emulator: kodi
   options:
@@ -304,6 +322,9 @@ lcdgames:
   core:     mame
   options:
     forceNoBezel: true
+lindbergh:
+  emulator: lindbergh-loader
+  core:     lindbergh-loader
 lowresnx:
   emulator: libretro
   core:     lowresnx
@@ -340,6 +361,9 @@ model2:
 model3:
   emulator: supermodel
   core:     supermodel
+mohaa:
+  emulator: openmohaa
+  core:     openmohaa
 moonlight:
   emulator: moonlight
   core:     moonlight
@@ -366,10 +390,7 @@ msxturbor:
   core:     bluemsx
 mugen:
   emulator: mugen
-  core:     ge-custom
-fpinball:
-  emulator: fpinball
-  core:     fpinball
+  core:     wine-tkg
 multivision:
   emulator: libretro
   core:     gearsystem
@@ -379,6 +400,9 @@ n64:
 n64dd:
   emulator: mupen64plus
   core:     glide64mk2
+namco22:
+  emulator: libretro
+  core:     mame
 namco2x6:
   emulator: play
   core:     play
@@ -427,11 +451,9 @@ openbor:
 openjazz:
   emulator: openjazz
   core:     openjazz
-openlara:
-  emulator: libretro
-  core:     openlara
-  options:
-    gfxbackend: gl
+oricatmos:
+  emulator: clk
+  core:     clk
 
 # P-S
 
@@ -484,6 +506,9 @@ ps2:
 ps3:
   emulator: rpcs3
   core:     rpcs3
+ps4:
+  emulator: shadps4
+  core:     shadps4
 psp:
   emulator: ppsspp
   core: ppsspp
@@ -502,6 +527,14 @@ pygame:
 pyxel:
   emulator: pyxel
   core:     pyxel
+quake:
+  emulator: libretro
+  core:     tyrquake
+quake2:
+  emulator: libretro
+  core:     vitaquake2
+  options:
+    gfxbackend: glcore
 quake3:
   emulator: ioquake3
   core:     ioquake3
@@ -511,6 +544,9 @@ raze:
 reminiscence:
   emulator: libretro
   core:     reminiscence
+rott:
+  emulator: taradino
+  core:     taradino
 samcoupe:
   emulator: samcoupe
   core:     samcoupe
@@ -534,7 +570,7 @@ sdlpop:
 sega32x:
   emulator: libretro
   core:     picodrive
-segacd:
+megacd:
   emulator: libretro
   core:     genesisplusgx
 sg1000:
@@ -543,6 +579,9 @@ sg1000:
 sgb:
   emulator: libretro
   core:     mgba
+sgb-msu1:
+  emulator: libretro
+  core:     bsnes
 singe:
   emulator: hypseus-singe
   core:     hypseus-singe
@@ -591,8 +630,8 @@ supervision:
   emulator: libretro
   core:     potator
 switch:
-  emulator: suyu
-  core:     suyu
+  emulator: citron
+  core:     citron
   options:
     hud_support: false
 systemsp:
@@ -618,6 +657,12 @@ ti99:
 tic80:
   emulator: libretro
   core:     tic80
+traider1:
+  emulator: tr1x
+  core:     tr1x
+traider2:
+  emulator: tr2x
+  core:     tr2x
 triforce:
   emulator: dolphin_triforce
   core:     dolphin_triforce
@@ -627,9 +672,6 @@ tutor:
 tyrian:
   emulator: tyrian
   core:     tyrian
-tyrquake:
-  emulator: libretro
-  core:     tyrquake
 uqm:
   emulator: uqm
   core:     uqm
@@ -648,17 +690,15 @@ vgmplay:
 videopacplus:
   emulator: libretro
   core:     o2em
+vircon32:
+  emulator: libretro
+  core:     vircon32
 virtualboy:
   emulator: libretro
   core:     vb
 vis:
   emulator: libretro
   core:     mame
-vitaquake2:
-  emulator: libretro
-  core:     vitaquake2
-  options:
-    gfxbackend: glcore
 vsmile:
   emulator: libretro
   core:     mame
@@ -676,12 +716,12 @@ wiiu:
   core:     cemu
 windows:
   emulator: wine
-  core:     ge-custom
+  core:     wine-tkg
   options:
     hud_support: false
 windows_installers:
   emulator: wine
-  core:     ge-custom
+  core:     wine-tkg
   options:
     hud_support: false
 wswan:
@@ -715,6 +755,9 @@ xbox360:
   core:     xenia-canary
   options:
     hud_support: false
+chihiro:
+  emulator: xemu
+  core:     xemu
 zc210:
   emulator: libretro
   core:     zc210

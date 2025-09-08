@@ -22,14 +22,15 @@ if [ "${MODE}" = "auto" ]; then
             PCIDEVID=$(lspci -mn -s "$d" | awk '{ gsub("\"",""); print "0x" toupper($4) }')
             echo "Checking for supported card using ID: $PCIDEVID" >> "$log"
             # Determine the mode and card name based on the JSON data
-            jq_output=$(jq -r --arg pcidevid "$PCIDEVID" '
-                .chips[] |
+            jq_output=$(jq -r --arg pcidevid "$PCIDEVID" '.chips[] |
                 select(.devid == $pcidevid) |
-                "\(.name)|\(.legacybranch // "null")|\(.features | contains(["kernelopen"]) | tostring)"' /usr/share/nvidia/supported-gpus.json)
+                "\(.name)|\(.legacybranch // "null")|\(.features | contains(["kernelopen"]) | tostring)"' \
+                /usr/share/nvidia/supported-gpus.json | head -n 1)
             
+            echo "Matched json query: $jq_output" >> $log
             # Extract the card name and determine the driver mode
             CARDNAME=$(echo "$jq_output" | cut -d'|' -f1)
-            LEGACYBRANCH=$(echo "$jq_output" | cut -d'|' -f2)
+            LEGACYDRIVER=$(echo "$jq_output" | cut -d'|' -f2)
             KERNELOPEN=$(echo "$jq_output" | cut -d'|' -f3)
 
             if [ -z "$CARDNAME" ]; then
@@ -37,16 +38,13 @@ if [ "${MODE}" = "auto" ]; then
                 echo "No matching card name found for ID: $PCIDEVID" >> $log
                 MODE="open"
             else
-                if [ "$LEGACYBRANCH" != "null" ]; then
-                    if [[ "$LEGACYBRANCH" == 340.* ]]; then
-                        MODE="340"
-                    elif [[ "$LEGACYBRANCH" == 390.* ]]; then
-                        MODE="390"
-                    elif [[ "$LEGACYBRANCH" == 470.* ]]; then
-                        MODE="470"
-                    else
-                        MODE="nouveau"
-                    fi
+                if [ "$LEGACYDRIVER" != "null" ]; then
+                    case $LEGACYDRIVER in
+                        340.*) MODE="legacy340" ;;
+                        390.*) MODE="legacy390" ;;
+                        470.*) MODE="legacy470" ;;
+                        *) MODE="nouveau" ;;
+                    esac
                 elif [ "$KERNELOPEN" = "true" ]; then
                     MODE="open"
                 else
@@ -79,7 +77,17 @@ mkdir -p /var/run/nvidia/modprobe || exit 1
 
 if [ "$MODE" = "proprietary" ] || [ "$MODE" = "open" ]; then
     echo "Using NVIDIA Production driver - ${NVIDIA_DRIVER_VERSION}" >> $log
-    echo
+    echo "" >> $log
+    echo "Removing any legacy driver symlinks" >> $log
+    # Clean up any legacy driver symlink files
+    find -L /lib32 -name "*${NVIDIA470_LEGACY_DRIVER_VERSION}*" -print0 | tee -a "$log" | xargs -0 -r rm -f
+    find -L /usr/lib -name "*${NVIDIA470_LEGACY_DRIVER_VERSION}*" -print0 | tee -a "$log" | xargs -0 -r rm -f
+    find -L /lib32 -name "*${NVIDIA390_LEGACY_DRIVER_VERSION}*" -print0 | tee -a "$log" | xargs -0 -r rm -f
+    find -L /usr/lib -name "*${NVIDIA390_LEGACY_DRIVER_VERSION}*" -print0 | tee -a "$log" | xargs -0 -r rm -f
+    find -L /lib32 -name "*${NVIDIA340_LEGACY_DRIVER_VERSION}*" -print0 | tee -a "$log" | xargs -0 -r rm -f
+    find -L /usr/lib -name "*${NVIDIA340_LEGACY_DRIVER_VERSION}*" -print0 | tee -a "$log" | xargs -0 -r rm -f
+    echo "" >> $log
+    # Blacklist the Nouveau driver
     echo "blacklist nouveau" > /var/run/nvidia/modprobe/blacklist-nouveau.conf
     echo "options nvidia-drm modeset=1" > /var/run/nvidia/modprobe/nvidia-drm.conf
     # [symbolic link 64-bit library files]
@@ -240,6 +248,7 @@ if [ "$MODE" = "proprietary" ] || [ "$MODE" = "open" ]; then
     # finally link appropriate production kernel modules
     mkdir -p /var/run/nvidia/modules
     if [ "$MODE" = "open" ]; then
+        echo "Linking NVIDIA open modules" >> $log
         ln -sf /usr/share/nvidia/modules/nvidia-production.ko /var/run/nvidia/modules/nvidia.ko
         ln -sf /var/run/nvidia/modules/nvidia.ko /lib/modules/$LINUX_VER/updates/nvidia.ko
         ln -sf /usr/share/nvidia/modules/nvidia-modeset-production.ko /var/run/nvidia/modules/nvidia-modeset.ko
@@ -249,6 +258,7 @@ if [ "$MODE" = "proprietary" ] || [ "$MODE" = "open" ]; then
         ln -sf /usr/share/nvidia/modules/nvidia-uvm-production.ko /var/run/nvidia/modules/nvidia-uvm.ko
         ln -sf /var/run/nvidia/modules/nvidia-uvm.ko /lib/modules/$LINUX_VER/updates/nvidia-uvm.ko
     elif [ "$MODE" = "proprietary" ]; then
+        echo "Linking NVIDIA proprietary modules" >> $log
         ln -sf /usr/share/nvidia/modules/nvidia-proprietary.ko /var/run/nvidia/modules/nvidia.ko
         ln -sf /var/run/nvidia/modules/nvidia.ko /lib/modules/$LINUX_VER/updates/nvidia.ko
         ln -sf /usr/share/nvidia/modules/nvidia-modeset-proprietary.ko /var/run/nvidia/modules/nvidia-modeset.ko
@@ -268,8 +278,13 @@ if [ "$MODE" = "proprietary" ] || [ "$MODE" = "open" ]; then
     done
 
 elif echo "$MODE" | grep -q -E '^(legacy470|legacy340|legacy390)$'; then
-    echo "Using an NVIDIA Legacy driver" >> $log
+    echo "Using a NVIDIA Legacy driver" >> $log
     echo "There may be driver issues due to lack of maintenance from Nvidia for modern kernels" >> $log
+    echo "" >> $log
+    echo "Removing any production driver symlinks" >> $log
+    # Clean up any production driver symlink files
+    find -L /lib32 -name "*${NVIDIA_DRIVER_VERSION}*" -print0 | tee -a "$log" | xargs -0 -r rm -f
+    find -L /usr/lib -name "*${NVIDIA_DRIVER_VERSION}*" -print0 | tee -a "$log" | xargs -0 -r rm -f
     echo "" >> $log
     if [ "$MODE" = "legacy470" ]
     then
@@ -284,7 +299,8 @@ elif echo "$MODE" | grep -q -E '^(legacy470|legacy340|legacy390)$'; then
 	    NVIDIA_LEGACY_DRIVER_VERSION=$NVIDIA340_LEGACY_DRIVER_VERSION
     fi
     echo "Using NVIDIA Legacy driver version - ${NVIDIA_LEGACY_DRIVER_VERSION}" >> $log
-    echo
+    echo "" >> $log
+    # Blacklist the Nouveau driver
     echo "blacklist nouveau" > /var/run/nvidia/modprobe/blacklist-nouveau.conf
     echo "options nvidia-drm modeset=1" > /etc/modprobe.d/nvidia-drm.conf
     # [symbolic link 64-bit library files]
@@ -390,7 +406,7 @@ elif echo "$MODE" | grep -q -E '^(legacy470|legacy340|legacy390)$'; then
     ln -sf /usr/lib/vdpau/libvdpau_nvidia.so.$NVIDIA_LEGACY_DRIVER_VERSION /var/run/nvidia/lib/libvdpau_nvidia.so.1.0
     ln -sf /var/run/nvidia/lib/libvdpau_nvidia.so.1.0 /usr/lib/vdpau/libvdpau_nvidia.so.1.0
 
-    if [ "$MODE" = "legacy" ]; then
+    if [ "$MODE" = "legacy470" ]; then
         # libnvidia-glvkspirv.so
         ln -sf /usr/lib/libnvidia-glvkspirv.so.$NVIDIA_LEGACY_DRIVER_VERSION /var/run/nvidia/lib/libnvidia-glvkspirv.so
         ln -sf /var/run/nvidia/lib/libnvidia-glvkspirv.so /usr/lib/libnvidia-glvkspirv.so
@@ -484,7 +500,7 @@ elif echo "$MODE" | grep -q -E '^(legacy470|legacy340|legacy390)$'; then
     ln -sf /lib32/vdpau/libvdpau_nvidia.so.$NVIDIA_LEGACY_DRIVER_VERSION /var/run/nvidia/lib32/libvdpau_nvidia.so.1.0
     ln -sf /var/run/nvidia/lib32/libvdpau_nvidia.so.1.0 /lib32/vdpau/libvdpau_nvidia.so.1.0
     
-    if [ "$MODE" = "legacy" ]; then
+    if [ "$MODE" = "legacy470" ]; then
         # libnvidia-glvkspirv.so
         ln -sf /lib32/libnvidia-glvkspirv.so.$NVIDIA_LEGACY_DRIVER_VERSION /var/run/nvidia/lib32/libnvidia-glvkspirv.so
         ln -sf /var/run/nvidia/lib32/libnvidia-glvkspirv.so /lib32/libnvidia-glvkspirv.so
@@ -573,13 +589,13 @@ elif echo "$MODE" | grep -q -E '^(legacy470|legacy340|legacy390)$'; then
         
         # finally link the kernel modules & run them
         mkdir -p /var/run/nvidia/modules
-        ln -sf /usr/share/nvidia/modules/nvidia-legacy.ko /var/run/nvidia/modules/nvidia.ko
+        ln -sf /usr/share/nvidia/modules/nvidia470-legacy.ko /var/run/nvidia/modules/nvidia.ko
         ln -sf /var/run/nvidia/modules/nvidia.ko /lib/modules/$LINUX_VER/updates/nvidia.ko
-        ln -sf /usr/share/nvidia/modules/nvidia-modeset-legacy.ko /var/run/nvidia/modules/nvidia-modeset.ko
+        ln -sf /usr/share/nvidia/modules/nvidia470-modeset-legacy.ko /var/run/nvidia/modules/nvidia-modeset.ko
         ln -sf /var/run/nvidia/modules/nvidia-modeset.ko /lib/modules/$LINUX_VER/updates/nvidia-modeset.ko
-        ln -sf /usr/share/nvidia/modules/nvidia-drm-legacy.ko /var/run/nvidia/modules/nvidia-drm.ko
+        ln -sf /usr/share/nvidia/modules/nvidia470-drm-legacy.ko /var/run/nvidia/modules/nvidia-drm.ko
         ln -sf /var/run/nvidia/modules/nvidia-drm.ko /lib/modules/$LINUX_VER/updates/nvidia-drm.ko
-        ln -sf /usr/share/nvidia/modules/nvidia-uvm-legacy.ko /var/run/nvidia/modules/nvidia-uvm.ko
+        ln -sf /usr/share/nvidia/modules/nvidia470-uvm-legacy.ko /var/run/nvidia/modules/nvidia-uvm.ko
         ln -sf /var/run/nvidia/modules/nvidia-uvm.ko /lib/modules/$LINUX_VER/updates/nvidia-uvm.ko
         for m in ipmi_devintf nvidia nvidia_modeset nvidia_uvm nvidia_drm ; do modprobe $m ; done
     
@@ -590,5 +606,3 @@ elif test "${MODE}" = "nouveau"; then
     test -e /var/run/nvidia/modprobe/blacklist-nouveau.conf && rm -f /var/run/nvidia/modprobe/blacklist-nouveau.conf
     test -e /var/run/nvidia/modprobe/nvidia-drm.conf        && rm -f /var/run/nvidia/modprobe/nvidia-drm.conf
 fi
-
-cp -f /var/log/nvidia.log /userdata/system/logs/nvidia.log

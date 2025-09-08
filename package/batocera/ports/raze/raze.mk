@@ -4,10 +4,10 @@
 #
 ################################################################################
 
-RAZE_VERSION = 1.10.2
+RAZE_VERSION = 1.11.0
 RAZE_SITE = $(call github,coelckers,Raze,$(RAZE_VERSION))
 RAZE_LICENSE = GPLv2
-RAZE_DEPENDENCIES = host-raze sdl2 bzip2 fluidsynth openal zmusic webp
+RAZE_DEPENDENCIES = host-raze sdl2 bzip2 fluidsynth openal zmusic webp libvpx
 RAZE_SUPPORTS_IN_SOURCE_BUILD = NO
 
 # We need the tools from the host package to build the target package
@@ -36,7 +36,7 @@ ifeq ($(BR2_PACKAGE_BATOCERA_VULKAN),y)
         RAZE_DEPENDENCIES += xlib_libX11 vulkan-headers vulkan-loader
         RAZE_CONF_OPTS += -DHAVE_VULKAN=ON
         RAZE_CONF_OPTS += -DVULKAN_USE_XLIB=ON -DVULKAN_USE_WAYLAND=OFF
-    else ifeq ($(BR2_PACKAGE_BATOCERA_WAYLAND_SWAY),y)
+    else ifeq ($(BR2_PACKAGE_WAYLAND),y)
         RAZE_DEPENDENCIES += wayland vulkan-headers vulkan-loader
         RAZE_CONF_OPTS += -DHAVE_VULKAN=ON
         RAZE_CONF_OPTS += -DVULKAN_USE_XLIB=OFF -DVULKAN_USE_WAYLAND=ON

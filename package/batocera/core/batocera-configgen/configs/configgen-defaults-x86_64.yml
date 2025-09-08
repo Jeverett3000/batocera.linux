@@ -142,9 +142,15 @@ psvita:
 jaguar:
   emulator: bigpemu
   core:     bigpemu
+jaguarcd:
+  emulator: bigpemu
+  core:     bigpemu
 chihiro:
   emulator: xemu
   core:     xemu
 spectravideo:
   emulator: openmsx
   core:     openmsx
+quake3:
+  emulator: vkquake3
+  core:     vkquake3

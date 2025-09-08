@@ -1,74 +1,77 @@
-#!/usr/bin/env python
+from __future__ import annotations
 
-import Command
-from generators.Generator import Generator
-import controllersConfig
-import shutil
-from shutil import copyfile
-import subprocess
-from subprocess import Popen
 import filecmp
-import configparser
 import os
-import sys
-import settings
+import shutil
+import subprocess
 from os import environ
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from ... import Command
+from ...batoceraPaths import CONFIGS
+from ...controller import generate_sdl_game_controller_config
+from ..Generator import Generator
+
+if TYPE_CHECKING:
+    from ...types import HotkeysContext
+
 
 class DrasticGenerator(Generator):
 
+    def getHotkeysContext(self) -> HotkeysContext:
+        return {
+            "name": "drastic",
+            "keys": { "exit": "KEY_ESC", "save_state": "KEY_F5", "restore_state": "KEY_F7", "menu": "KEY_F1", "fastforward": "KEY_TAB", "swap_screen": "KEY_F2" }
+        }
+
     def generate(self, system, rom, playersControllers, metadata, guns, wheels, gameResolution):
 
-        drastic_root = "/userdata/system/configs/drastic"
-        drastic_bin = "/userdata/system/configs/drastic/drastic"
-        drastic_conf = "/userdata/system/configs/drastic/config/drastic.cfg"
-        if not os.path.exists(drastic_root):
+        drastic_root = CONFIGS / "drastic"
+        drastic_bin = drastic_root / "drastic"
+        drastic_conf = drastic_root / "config" / "drastic.cfg"
+
+        if not drastic_root.exists():
             shutil.copytree("/usr/share/drastic", drastic_root)
 
-        if not os.path.exists(drastic_bin) or not filecmp.cmp("/usr/bin/drastic", drastic_bin):
+        if not drastic_bin.exists() or not filecmp.cmp("/usr/bin/drastic", drastic_bin):
             shutil.copyfile("/usr/bin/drastic", drastic_bin)
-            os.chmod(drastic_bin, 0o0775)
+            drastic_bin.chmod(0o0775)
 
         # Settings, Language and ConfirmPowerOff
-        f = open(drastic_conf, "w", encoding="ascii")
+        f = drastic_conf.open("w", encoding="ascii")
 
         #Getting Values from ES
-        if system.isOptSet("drastic_hires") and system.config["drastic_hires"] == '1':
-            esvaluedrastichires = 1
+        if system.config.get("drastic_scaling") == 'nearest':
+            subprocess.run(f"xxd {drastic_bin} > drastic.txt", shell=True)
+            if subprocess.run("grep -q '6c69 6e65 6172' drastic.txt", shell=True).returncode == 0:
+                # Swap to nearest neighbor
+                subprocess.run("sed -i 's/6c69 6e65 6172/3000 0000 0000/g' drastic.txt", shell=True)
+                subprocess.run(f"xxd -r drastic.txt > {drastic_bin}", shell=True)
+                Path("drastic.txt").unlink()
         else:
-            esvaluedrastichires = 0
-        
-        if system.isOptSet("drastic_threaded") and system.config["drastic_threaded"] == '1':
-            esvaluedrasticthreaded = 1
-        else:
-            esvaluedrasticthreaded = 0    
-        
-        if system.isOptSet("drastic_fix2d") and system.config["drastic_fix2d"] == '1':
-            esvaluedrasticfix2d = 1
-        else:
-            esvaluedrasticfix2d = 0 
-        
-        if system.isOptSet("drastic_screen_orientation"):
-            esvaluedrasticscreenorientation = system.config["drastic_screen_orientation"]
-        else:
-            esvaluedrasticscreenorientation = 0
+            subprocess.run(f"xxd {drastic_bin} > drastic.txt", shell=True)
+            if subprocess.run("grep -q '3000 0000 0000' drastic.txt", shell=True).returncode == 0:
+                # Swap to bilinear
+                subprocess.run("sed -i 's/3000 0000 0000/6c69 6e65 6172/g' drastic.txt", shell=True)
+                subprocess.run(f"xxd -r drastic.txt > {drastic_bin}", shell=True)
+                Path("drastic.txt").unlink()
+
+        esvaluedrastichires = system.config.get_int("drastic_hires", 0)
+        esvaluedrasticthreaded = system.config.get_int("drastic_threaded", 0)
+        esvaluedrasticfix2d = system.config.get_int("drastic_fix2d", 0)
+        esvaluedrasticscreenorientation = system.config.get_int("drastic_screen_orientation", 0)
 
         # Default to none as auto seems to be bugged (just reduces framerate by half, even when the system is otherwise capable of running at 60fps, even the rpi3 can do this).
-        if system.isOptSet("drastic_frameskip_type"):
-            esvaluedrasticframeskiptype = system.config["drastic_frameskip_type"]
-        else:
-            esvaluedrasticframeskiptype = 0
-
-        if system.isOptSet("drastic_frameskip_value"):
-            esvaluedrasticframeskipvalue = system.config["drastic_frameskip_value"]
-        else:
-            esvaluedrasticframeskipvalue = 1
+        esvaluedrasticframeskiptype = system.config.get_int("drastic_frameskip_type", 0)
+        esvaluedrasticframeskipvalue = system.config.get_int("drastic_frameskip_value", 1)
 
         textList = [                             # 0,1,2,3 ...
         "enable_sound"                 + " = 1",
         "compress_savestates"          + " = 1",
         "savestate_snapshot"           + " = 1",
         "firmware.username"            + " = Batocera",
-        "firmware.language"            + " = " + str(getDrasticLangFromEnvironment()),
+        "firmware.language"            + f" = {getDrasticLangFromEnvironment()}",
         "firmware.favorite_color"      + " = 11",
         "firmware.birthday_month"      + " = 11",
         "firmware.birthday_day"        + " = 25",
@@ -76,18 +79,18 @@ class DrasticGenerator(Generator):
         "rtc_system_time"              + " = 1",
         "use_rtc_custom_time"          + " = 0",
         "rtc_custom_time"              + " = 0",
-        "frameskip_type"               + " = " + str(esvaluedrasticframeskiptype),      #None/Manual/Auto
-        "frameskip_value"              + " = " + str(esvaluedrasticframeskipvalue),     #1-9
+        "frameskip_type"               + f" = {esvaluedrasticframeskiptype}",      #None/Manual/Auto
+        "frameskip_value"              + f" = {esvaluedrasticframeskipvalue}",     #1-9
         "safe_frameskip"               + " = 1",                                        #Needed for automatic frameskipping to actually work.
         "disable_edge_marking"         + " = 1",                                        #will prevent edge marking. It draws outlines around some 3D models to give a cel-shaded effect. Since DraStic doesn't emulate anti-aliasing, it'll cause edges to look harsher than they may on a real DS.
-        "fix_main_2d_screen"           + " = " + str(esvaluedrasticfix2d),              #Top Screen will always be the Action Screen (for 2d games like Sonic)
-        "hires_3d"                     + " = " + str(esvaluedrastichires),              #High Resolution 3D Rendering
-        "threaded_3d"                  + " = " + str(esvaluedrasticthreaded),           #MultiThreaded 3D Rendering - Improves perf in 3D - can cause glitch.
-        "screen_orientation"           + " = " + str(esvaluedrasticscreenorientation),  #Vertical/Horizontal/OneScreen
+        "fix_main_2d_screen"           + f" = {esvaluedrasticfix2d}",              #Top Screen will always be the Action Screen (for 2d games like Sonic)
+        "hires_3d"                     + f" = {esvaluedrastichires}",              #High Resolution 3D Rendering
+        "threaded_3d"                  + f" = {esvaluedrasticthreaded}",           #MultiThreaded 3D Rendering - Improves perf in 3D - can cause glitch.
+        "screen_orientation"           + f" = {esvaluedrasticscreenorientation}",  #Vertical/Horizontal/OneScreen
         "screen_scaling"               + " = 0",                                        #No Scaling/Stretch Aspect/1x2x/2x1x/TvSplit
         "screen_swap "                 + " = 0"
         ]
-        
+
         # Write the cfg file
         for line in textList:
             f.write(line)
@@ -95,7 +98,7 @@ class DrasticGenerator(Generator):
         f.close()
 
         #Configuring Pad in the cfg
-        configurePads(settings, system, drastic_conf)
+        configurePads(drastic_conf)
 
         os.chdir(drastic_root)
         commandArray = [drastic_bin, rom]
@@ -105,7 +108,7 @@ class DrasticGenerator(Generator):
             env={
                 'DISPLAY': '0.0',
                 'LIB_FB': '3',
-                'SDL_GAMECONTROLLERCONFIG': controllersConfig.generateSdlGameControllerConfig(playersControllers)
+                'SDL_GAMECONTROLLERCONFIG': generate_sdl_game_controller_config(playersControllers)
             })
 
 # Language auto-setting
@@ -114,10 +117,9 @@ def getDrasticLangFromEnvironment():
     availableLanguages = { "ja_JP": 0, "en_US": 1, "fr_FR": 2, "de_DE": 3, "it_IT": 4, "es_ES": 5 }
     if lang in availableLanguages:
         return availableLanguages[lang]
-    else:
-        return availableLanguages["en_US"]
+    return availableLanguages["en_US"]
 
-def configurePads(settings, system, drastic_conf):
+def configurePads(drastic_conf: Path):
     keyboardpart =''.join((
     "controls_a[CONTROL_INDEX_UP]                           = 338          # Arrow Up        \n",
     "controls_a[CONTROL_INDEX_DOWN]                         = 337          # Arrow Down      \n",
@@ -136,7 +138,7 @@ def configurePads(settings, system, drastic_conf):
     "controls_a[CONTROL_INDEX_TOUCH_CURSOR_DOWN]            = 65535        # PAD2KEY MOUSE   \n",
     "controls_a[CONTROL_INDEX_TOUCH_CURSOR_LEFT]            = 65535        # PAD2KEY MOUSE   \n",
     "controls_a[CONTROL_INDEX_TOUCH_CURSOR_RIGHT]           = 65535        # PAD2KEY MOUSE   \n",
-    "controls_a[CONTROL_INDEX_TOUCH_CURSOR_PRESS]           = 360          # Left Click      \n", 
+    "controls_a[CONTROL_INDEX_TOUCH_CURSOR_PRESS]           = 360          # Left Click      \n",
     "controls_a[CONTROL_INDEX_MENU]                         = 314          # F1              \n",
     "controls_a[CONTROL_INDEX_SAVE_STATE]                   = 318          # F5              \n",
     "controls_a[CONTROL_INDEX_LOAD_STATE]                   = 320          # F7              \n",
@@ -176,7 +178,7 @@ def configurePads(settings, system, drastic_conf):
     "controls_b[CONTROL_INDEX_TOUCH_CURSOR_DOWN]            = 65535   \n",
     "controls_b[CONTROL_INDEX_TOUCH_CURSOR_LEFT]            = 65535   \n",
     "controls_b[CONTROL_INDEX_TOUCH_CURSOR_RIGHT]           = 65535   \n",
-    "controls_b[CONTROL_INDEX_TOUCH_CURSOR_PRESS]           = 65535   \n", 
+    "controls_b[CONTROL_INDEX_TOUCH_CURSOR_PRESS]           = 65535   \n",
     "controls_b[CONTROL_INDEX_MENU]                         = 65535   \n",
     "controls_b[CONTROL_INDEX_SAVE_STATE]                   = 65535   \n",
     "controls_b[CONTROL_INDEX_LOAD_STATE]                   = 65535   \n",
@@ -198,12 +200,11 @@ def configurePads(settings, system, drastic_conf):
     "controls_b[CONTROL_INDEX_UI_PAGE_DOWN]                 = 65535   \n",
     "controls_b[CONTROL_INDEX_UI_SWITCH]                    = 65535     "))
 
-    f = open(drastic_conf, "a", encoding="ascii")
-    f.write(keyboardpart)
-    f.write("\n")    
-    f.write("\n")    
-    f.write(padpart)
-    f.close()
+    with drastic_conf.open("a", encoding="ascii") as f:
+        f.write(keyboardpart)
+        f.write("\n")
+        f.write("\n")
+        f.write(padpart)
 
 #    def executionDirectory(self, config, rom):
 #        return os.path.dirname(drastic_root)

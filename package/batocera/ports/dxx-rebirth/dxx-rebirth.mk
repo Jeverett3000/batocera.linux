@@ -3,8 +3,8 @@
 # dxx-rebirth (Descent 1 & 2) engine
 #
 ################################################################################
-# Version: Commits on Jul 21, 2024
-DXX_REBIRTH_VERSION = 5b8dc756f67d3077cfe171838aa15c798cc67c98
+# Version: Commits on Jan 12, 2025
+DXX_REBIRTH_VERSION = f3a2afc43880899d570d97bf4e3392f325870116
 DXX_REBIRTH_SITE = https://github.com/dxx-rebirth/dxx-rebirth
 DXX_REBIRTH_SITE_METHOD=git
 DXX_REBIRTH_LICENSE = GPLv3
@@ -16,11 +16,16 @@ DXX_REBIRTH_CFLAGS    = $(TARGET_CFLAGS)
 DXX_REBIRTH_CXXFLAGS  = $(TARGET_CXXFLAGS)
 DXX_REBIRTH_SCONS_ENV = $(TARGET_CONFIGURE_OPTS)
 
-DXX_REBIRTH_SCONS_OPTS = -j$(PARALLEL_JOBS) sdl2=yes
+DXX_REBIRTH_SCONS_OPTS = -j$(PARALLEL_JOBS)
 
-# dxx-rebirth currently does not support sdl2 + opengles combo
-ifneq ($(BR2_PACKAGE_HAS_LIBGL),y)
-DXX_REBIRTH_SCONS_OPTS += opengles=yes
+DXX_REBIRTH_SCONS_OPTS += sdl2=yes
+
+ifeq ($(BR2_PACKAGE_LIBGLEW),y)
+    DXX_REBIRTH_DEPENDENCIES += libglew
+endif
+
+ifeq ($(BR2_PACKAGE_LIBGLU),y)
+    DXX_REBIRTH_DEPENDENCIES += libglu
 endif
 
 define DXX_REBIRTH_BUILD_CMDS

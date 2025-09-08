@@ -3,8 +3,8 @@
 # batocera-emulationstation
 #
 ################################################################################
-# Last update: Commits on Sept 2, 2024
-BATOCERA_EMULATIONSTATION_VERSION = bb1b806dc4b008ac47257af484ef198e52e78d0d
+# Last update: Commits on Sep 06, 2025
+BATOCERA_EMULATIONSTATION_VERSION = d22417d8c3d109609a61406f84cd2f68e2d65662
 BATOCERA_EMULATIONSTATION_SITE = https://github.com/batocera-linux/batocera-emulationstation
 BATOCERA_EMULATIONSTATION_SITE_METHOD = git
 BATOCERA_EMULATIONSTATION_LICENSE = MIT
@@ -19,13 +19,17 @@ BATOCERA_EMULATIONSTATION_INSTALL_STAGING = YES
 BATOCERA_EMULATIONSTATION_CONF_OPTS += \
     -DCMAKE_CXX_FLAGS=-D$(call UPPERCASE,$(BATOCERA_SYSTEM_ARCH))
 
+ifeq ($(BR2_PACKAGE_XAPP_XINIT),y)
+BATOCERA_EMULATIONSTATION_DEPENDENCIES += xapp_xinit
+endif
+
 ifeq ($(BR2_PACKAGE_HAS_LIBMALI),y)
 BATOCERA_EMULATIONSTATION_DEPENDENCIES += libmali
 BATOCERA_EMULATIONSTATION_CONF_OPTS += -DCMAKE_EXE_LINKER_FLAGS=-lmali
 BATOCERA_EMULATIONSTATION_CONF_OPTS += -DCMAKE_SHARED_LINKER_FLAGS=-lmali
 endif
 
-ifeq ($(BR2_PACKAGE_HAS_LIBGL),y)
+ifeq ($(BR2_PACKAGE_HAS_LIBGL)$(BR2_PACKAGE_XSERVER_XORG_SERVER),yy)
 BATOCERA_EMULATIONSTATION_CONF_OPTS += -DGL=ON
 else
 ifeq ($(BR2_PACKAGE_HAS_LIBGLES),y)
@@ -34,7 +38,6 @@ endif
 endif
 
 ifeq ($(BR2_PACKAGE_RPI_USERLAND),y)
-BATOCERA_EMULATIONSTATION_DEPENDENCIES += omxplayer
 BATOCERA_EMULATIONSTATION_CONF_OPTS += -DBCM=ON -DRPI=ON
 endif
 
@@ -129,8 +132,6 @@ define BATOCERA_EMULATIONSTATION_RESOURCES
 	    $(TARGET_DIR)/usr/share/emulationstation/resources/flags
 	$(INSTALL) -m 0644 -D $(@D)/resources/battery/*.* \
 	    $(TARGET_DIR)/usr/share/emulationstation/resources/battery
-	$(INSTALL) -m 0644 -D $(@D)/resources/services/*.* \
-	    $(TARGET_DIR)/usr/share/emulationstation/resources/services
 	$(INSTALL) -m 0644 -D $(@D)/resources/shaders/*.* \
 	    $(TARGET_DIR)/usr/share/emulationstation/resources/shaders
 	$(INSTALL) -m 0644 -D $(@D)/resources/shaders/*.* \
@@ -138,8 +139,7 @@ define BATOCERA_EMULATIONSTATION_RESOURCES
 
 	# es_input.cfg
 	mkdir -p $(TARGET_DIR)/usr/share/batocera/datainit/system/configs/emulationstation
-	cp $(BATOCERA_EMULATIONSTATION_SOURCE_PATH)/controllers/es_input.cfg \
-		$(TARGET_DIR)/usr/share/batocera/datainit/system/configs/emulationstation
+	cp $(BATOCERA_EMULATIONSTATION_SOURCE_PATH)/controllers/es_input.cfg $(TARGET_DIR)/usr/share/emulationstation
 
 	# savestates config
 	$(INSTALL) -m 0644 $(BATOCERA_EMULATIONSTATION_SOURCE_PATH)/es_savestates.cfg $(TARGET_DIR)/usr/share/emulationstation
@@ -162,10 +162,6 @@ BATOCERA_EMULATIONSTATION_CONF_OPTS += -DCEC=OFF
 #else
 #BATOCERA_EMULATIONSTATION_CONF_OPTS += -DCEC=ON
 #endif
-
-ifeq ($(BR2_PACKAGE_BATOCERA_SPLASH_OMXPLAYER),y)
-BATOCERA_EMULATIONSTATION_ARGS = $${EXTRA_OPTS}
-endif
 
 # on SPLASH_MPV, the splash with video + es splash is ok
 ifeq ($(BR2_PACKAGE_BATOCERA_SPLASH_MPV),y)
@@ -192,9 +188,15 @@ BATOCERA_EMULATIONSTATION_DEPENDENCIES += sway
 BATOCERA_EMULATIONSTATION_POST_INSTALL_TARGET_HOOKS += BATOCERA_EMULATIONSTATION_WAYLAND_SWAY
 endif
 
+ifeq ($(BR2_PACKAGE_BATOCERA_WAYLAND_LABWC),y)
+BATOCERA_EMULATIONSTATION_CMD = labwc-launch
+BATOCERA_EMULATIONSTATION_DEPENDENCIES += labwc
+BATOCERA_EMULATIONSTATION_POST_INSTALL_TARGET_HOOKS += BATOCERA_EMULATIONSTATION_WAYLAND_LABWC
+endif
+
 define BATOCERA_EMULATIONSTATION_XORG
 	$(INSTALL) -D -m 0755 $(BATOCERA_EMULATIONSTATION_SOURCE_PATH)/xorg/xinitrc \
-	    $(TARGET_DIR)/etc/X11/xinit/xinitrc
+	    $(BINARIES_DIR)/batocera-target/etc/X11/xinit/xinitrc
 endef
 
 define BATOCERA_EMULATIONSTATION_WAYLAND_SWAY
@@ -204,6 +206,20 @@ define BATOCERA_EMULATIONSTATION_WAYLAND_SWAY
 	    $(TARGET_DIR)/etc/sway/config
     $(INSTALL) -D -m 0755 $(BATOCERA_EMULATIONSTATION_SOURCE_PATH)/wayland/sway/sway-launch \
 	    $(TARGET_DIR)/usr/bin/sway-launch
+endef
+
+define BATOCERA_EMULATIONSTATION_WAYLAND_LABWC
+    mkdir -p $(TARGET_DIR)/usr/share/labwc
+	$(INSTALL) -D -m 0755 $(BATOCERA_EMULATIONSTATION_SOURCE_PATH)/wayland/labwc/04-labwc.sh \
+	    $(TARGET_DIR)/etc/profile.d/04-labwc.sh
+	$(INSTALL) -D -m 0755 $(BATOCERA_EMULATIONSTATION_SOURCE_PATH)/wayland/labwc/rc.xml \
+	    $(TARGET_DIR)/usr/share/labwc/rc.xml
+	$(INSTALL) -D -m 0755 $(BATOCERA_EMULATIONSTATION_SOURCE_PATH)/wayland/labwc/S14labwc \
+	    $(TARGET_DIR)/etc/init.d/S14labwc
+    $(INSTALL) -D -m 0755 $(BATOCERA_EMULATIONSTATION_SOURCE_PATH)/wayland/labwc/autostart \
+	    $(TARGET_DIR)/usr/share/labwc/autostart
+    $(INSTALL) -D -m 0755 $(BATOCERA_EMULATIONSTATION_SOURCE_PATH)/wayland/labwc/labwc-launch \
+	    $(TARGET_DIR)/usr/bin/labwc-launch
 endef
 
 define BATOCERA_EMULATIONSTATION_BOOT

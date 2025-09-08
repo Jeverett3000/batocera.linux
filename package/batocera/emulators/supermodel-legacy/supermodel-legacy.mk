@@ -14,6 +14,10 @@ ifeq ($(BR2_PACKAGE_LIBGLEW),y)
     SUPERMODEL_LEGACY_DEPENDENCIES += libglew
 endif
 
+ifeq ($(BR2_PACKAGE_LIBGLU),y)
+    SUPERMODEL_LEGACY_DEPENDENCIES += libglu
+endif
+
 define SUPERMODEL_LEGACY_BUILD_CMDS
 	cp $(@D)/Makefiles/Makefile.UNIX $(@D)/Makefile
 	$(SED) "s|CC = gcc|CC = $(TARGET_CC)|g" $(@D)/Makefile
@@ -49,8 +53,7 @@ endef
 
 define SUPERMODEL_LEGACY_POST_PROCESS
 	mkdir -p $(TARGET_DIR)/usr/share/evmapy $(TARGET_DIR)/usr/share/supermodel
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/supermodel/model3.supermodel.keys $(TARGET_DIR)/usr/share/evmapy
-    cp -pr $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/supermodel/NVRAM $(TARGET_DIR)/usr/share/supermodel
+	cp -pr $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/supermodel/NVRAM $(TARGET_DIR)/usr/share/supermodel
 endef
 
 SUPERMODEL_LEGACY_PRE_PATCH_HOOKS += SUPERMODEL_LEGACY_LINE_ENDINGS_FIXUP

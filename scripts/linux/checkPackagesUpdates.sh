@@ -31,7 +31,6 @@ PACKAGES_LIBRETRO="libretro-81
                    libretro-bsnes-hd
                    libretro-cap32
                    libretro-chailove
-                   libretro-citra
                    libretro-craft
                    libretro-desmume
                    libretro-dinothawr
@@ -52,6 +51,7 @@ PACKAGES_LIBRETRO="libretro-81
                    libretro-gambatte
                    libretro-gearsystem
                    libretro-genesisplusgx
+                   libretro-genesisplusgx-expanded
                    libretro-genesisplusgx-wide
                    libretro-gpsp
                    libretro-gw
@@ -64,7 +64,6 @@ PACKAGES_LIBRETRO="libretro-81
                    libretro-lutro
                    libretro-mame
                    libretro-mame2003-plus
-                   libretro-mame2010
                    libretro-melonds
                    libretro-melonds-ds
                    libretro-mesen
@@ -77,7 +76,6 @@ PACKAGES_LIBRETRO="libretro-81
                    libretro-nestopia
                    libretro-nxengine
                    libretro-o2em
-                   libretro-openlara
                    libretro-opera
                    libretro-parallel-n64
                    libretro-pc88
@@ -144,11 +142,11 @@ PACKAGES_OPENBOR="openbor4432
 
 PACKAGES_EMULATORS="amiberry
                     applewin
+                    azahar
                     bigpemu
                     cemu
-                    citra
+                    citron
                     hypseus-singe
-                    demul
                     dolphin-emu
                     dolphin-triforce
                     dosbox
@@ -160,7 +158,6 @@ PACKAGES_EMULATORS="amiberry
                     liblcf
                     eka2l1
                     flycast
-                    fpinball
                     fsuae
                     gsplus
                     hatari
@@ -171,7 +168,6 @@ PACKAGES_EMULATORS="amiberry
                     mame
                     melonds
                     model2
-                    moonlight-embedded
                     openmsx
                     pcsx2
                     pifba
@@ -184,73 +180,92 @@ PACKAGES_EMULATORS="amiberry
                     ruffle
                     ryujinx
                     scummvm
+                    shadps4
                     simcoupe
                     snes9x
                     solarus-engine
                     sugarbox
                     supermodel
                     supermodel-es
-                    suyu
                     thextech
                     tsugaru
                     vice
                     vita3k
                     vpinball
+                    x16emu
                     xemu
                     xenia
                     xenia-canary"
 
 PACKAGES_PORTS="abuse
                 abuse-data
+                bloodmod
+                bstone
                 cannonball
+                catacombgl
                 cdogs
+                cdoom
                 cgenius
                 corsixth
+                d3le
+                dentonmod
+                desolated
                 devilutionx
+                dhewm3
                 dxx-rebirth
                 ecwolf
                 eduke32
+                eldoom
                 etlegacy
                 fallout1-ce
                 fallout2-ce
                 fheroes2
+                fitz
+                grimm
                 gzdoom
+                hardcorps
                 hcl
                 hurrican
                 ioquake3
                 iortcw
+                jazz2-native
+                lindbergh-loader
+                openmohaa
                 openjazz
+                openjk
+                openjkdf2
+                perfected
                 raze
+                realgibs
+                rivensin
                 sdlpop
+                sikkmod
                 sonic3-air
                 sonic2013
                 soniccd
                 sonic-mania
+                taradino
                 theforceengine
+                tr1x
+                tr2x
                 tyrian
                 uqm
                 vcmi
                 hlsdk-xash3d
                 hlsdk-xash3d-dmc
                 hlsdk-xash3d-opfor
-                xash3d-fwgs"
+                xash3d-fwgs
+                vkquake
+                vkquake2
+                vkquake3"
 
-PACKAGES_WINE="d8vk
-               dxvk
+PACKAGES_WINE="dxvk
                dxvk-nvapi
                faudio
                mf
                rtkit
-               vkd3d
                vkd3d-proton
-               wine-ge-custom
-               wine-ge-custom-wow64_32
-               wine-lutris
-               wine-lutris-wow64_32
-               wine-mono-lutris
-               wine-mono-proton
-               wine-proton
-               wine-proton-wow64_32"
+               wine-tkg"
 
 PACKAGES_CONTROLLERS="aelightgun
                       aimtrak-guns
@@ -268,11 +283,12 @@ PACKAGES_CONTROLLERS="aelightgun
                       guncon3
                       hid-nx
                       input-wrapper
-                      jammasd
                       joycond
                       lightguns-games-precalibrations
                       mk_arcade_joystick_rpi
                       new-lg4ff
+                      openfire-guns
+                      onehit-guns
                       qtsixa
                       qtsixa-shanwan
                       retrogame
@@ -286,12 +302,21 @@ PACKAGES_CONTROLLERS="aelightgun
                       wiimote-3rdparty
                       wiimotes-rules
                       xarcade2jstick
+                      xgunner-lightguns
                       xone
                       xow
                       xpadneo
                       xpad-noone"
 
-PACKAGES_ALLGROUPS="RETROARCH LIBRETRO MUPEN OPENBOR EMULATORS PORTS WINE CONTROLLERS"
+PACKAGES_UTILS="btop
+                mangohud
+                moonlight-embedded
+                ryzenadj
+                switchres
+                syncthing
+                winetricks"
+
+PACKAGES_ALLGROUPS="RETROARCH LIBRETRO MUPEN OPENBOR EMULATORS PORTS WINE CONTROLLERS UTILS"
 ### ############# ###
 
 # COLORS ##
@@ -314,7 +339,7 @@ show_help() {
   echo "[package] can be any of the *.mk under ./packages/batocera/ (without the extension \".mk\")"
   echo "Example: $0 libretro-mame libretro-fbneo   (search updates for both \"libretro-mame\" and \"libretro-fbneo\" packages)"
   echo ""
-  echo "[PACKAGE] can be RETROARCH, LIBRETRO, MUPEN, OPENBOR, EMULATORS, PORTS, WINE, CONTROLLERS, ALLGROUPS, ALL"
+  echo "[PACKAGE] can be RETROARCH, LIBRETRO, MUPEN, OPENBOR, EMULATORS, PORTS, WINE, CONTROLLERS, ALLGROUPS, UTILS, ALL"
   echo "Example: $0 ALLGROUPS   (search updates for all PACKAGE groups)"
   echo ""
   echo "It is posible to combine packages and groups."
@@ -432,20 +457,20 @@ hataritagdate_GETNET() {
   wget -qO - "${1}/tag/?id=v${2}" | grep "tag date" | sed -e s#'.*</td><td>\(.*\) [0-9]*:.*$'#'\1'#
 }
 
-suyugitlastcommit_GETNET() {
-  wget -qO - "https://git.suyu.dev/${1}${2}" | grep -m1 -Eio '/commit/[0-9a-f]{40}' | sed -e 's#/commit/##' | head -n 1
+citrongitlastcommit_GETNET() {
+  wget -qO - "https://git.citron-emu.org/${1}${2}" | grep -m1 -Eio '/commit/[0-9a-f]{40}' | sed -e 's#/commit/##' | head -n 1
 }
 
-suyugitcommitdate_GETNET() {
-  wget -qO - "https://git.suyu.dev/${1}/commit/${2}" | grep -m1 'relative-time' | sed -e s#'.*"true">\(.*\) [0-9]*:.*$'#'\1'#
+citrongitcommitdate_GETNET() {
+  wget -qO - "https://git.citron-emu.org/${1}/commit/${2}" | grep -m1 'relative-time' | sed -e s#'.*"true">\(.*\) [0-9]*:.*$'#'\1'#
 }
 
-suyugitlasttag_GETNET() {
-  wget -qO - "https://git.suyu.dev/${1}/tags" | grep -m1 "/tag/" | sed -e s#'.*>\(.*\)<.*$'#'\1'#
+citrongitlasttag_GETNET() {
+  wget -qO - "https://git.citron-emu.org/${1}/tags" | grep -m1 "/tag/" | sed -e s#'.*>\(.*\)<.*$'#'\1'#
 }
 
-suyugittagdate_GETNET() {
-  suyugitcommitdate_GETNET "${1}" "$(wget -qO - "https://git.suyu.dev/${1}/releases/tag/${2}" | grep -m1 -Eio '/commit/[0-9a-f]{40}' | sed -e 's#/commit/##')"
+citrongittagdate_GETNET() {
+  citrongitcommitdate_GETNET "${1}" "$(wget -qO - "https://git.citron-emu.org/${1}/releases/tag/${2}" | grep -m1 -Eio '/commit/[0-9a-f]{40}' | sed -e 's#/commit/##')"
 }
 
 sourcehutlasttag_GETNET() {
@@ -462,6 +487,22 @@ gitlabfreedesktoplasttag_GETNET() {
 
 gitlabfreedesktoptagdate_GETNET() {
   wget -qO - "https://gitlab.freedesktop.org/${1}/-/tags/${2}" | grep -m1 'js-timeago' | sed -e s#'.*data-container="body">\(.*\)</time>.*$'#'\1'#
+}
+
+crediarlastcommit_GETNET() {
+  wget -qO - "https://crediar.dev/${1}/-/commits" | grep -oE 'commit/[0-9a-f]{40}' | head -n1 | sed 's#commit/##'
+}
+
+crediarcommitdate_GETNET() {
+  wget -qO - "https://crediar.dev/${1}/-/commit/${2}" | grep -m1 'js-timeago' | sed -e 's#.*data-container="body">\(.*\)</time>.*$#\1#'
+}
+
+crediarlasttag_GETNET() {
+  wget -qO - "https://crediar.dev/${1}/-/tags" | grep -oE '/-/tags/[^"]+' | head -n1 | sed 's#/[-]tags/##'
+}
+
+crediartagdate_GETNET() {
+  wget -qO - "https://crediar.dev/${1}/-/tags/${2}" | grep -m1 'js-timeago' | sed -e 's#.*data-container="body">\(.*\)</time>.*$#\1#'
 }
 
 ## /HELPERS ##
@@ -569,16 +610,6 @@ create_pkg_functions_BitBucket() {
 create_pkg_functions_RichWhiteHouse() {
   eval "${1}_GETNET() {
     wget -qO - 'https://www.richwhitehouse.com/jaguar/index.php?content=download' | grep -m1 'BigPEmu_Linux64_v[0-9]*\.tar\.gz' | sed -e 's#.*BigPEmu_Linux64_\(v[0-9]*\)\.tar\.gz.*#\1#'
-  }"
-  eval "${1}_GETCUR() {
-    X1=\$(pkg_GETCURVERSION ${1})
-    echo \"\${X1}\"
-  }"
-}
-
-create_pkg_functions_demul() {
-  eval "${1}_GETNET() {
-    wget -qO - 'http://demul.emulation64.com/downloads/' | grep -m1 '.7z' | sed -e s#'.*files/\(.*\)\.7z.*$'#'\1'#
   }"
   eval "${1}_GETCUR() {
     X1=\$(pkg_GETCURVERSION ${1})
@@ -743,29 +774,29 @@ create_pkg_functions_Hatari() {
   }"
 }
 
-create_pkg_functions_Suyu() {
+create_pkg_functions_Citron() {
   GH_VERS=$(pkg_GETCURVERSION "${1}")
   if test "$(echo "${GH_VERS}" | wc -c)" = 41 # git full checksum is 40 plus null char
   then
     eval "${1}_GETNET() {
-      X1=\$(suyugitlastcommit_GETNET ${2} ${3})
-      X2=\$(suyugitcommitdate_GETNET ${2} \${X1})
+      X1=\$(citrongitlastcommit_GETNET ${2} ${3})
+      X2=\$(citrongitcommitdate_GETNET ${2} \${X1})
       echo \"\${X1} - \${X2}\"
     }"
     eval "${1}_GETCUR() {
       X1=\$(pkg_GETCURVERSION ${1})
-      X2=\$(suyugitcommitdate_GETNET ${2} \${X1})
+      X2=\$(citrongitcommitdate_GETNET ${2} \${X1})
       echo \"\${X1} - \${X2}\"
     }"
   else
     eval "${1}_GETNET() {
-      X1=\$(suyugitlasttag_GETNET ${2})
-      X2=\$(suyugittagdate_GETNET ${2} \${X1})
+      X1=\$(citrongitlasttag_GETNET ${2})
+      X2=\$(citrongittagdate_GETNET ${2} \${X1})
       echo \"\${X1} - \${X2}\"
     }"
     eval "${1}_GETCUR() {
       X1=\$(pkg_GETCURVERSION ${1})
-      X2=\$(suyugittagdate_GETNET ${2} \${X1})
+      X2=\$(citrongittagdate_GETNET ${2} \${X1})
       echo \"\${X1} - \${X2}\"
     }"
   fi
@@ -966,6 +997,34 @@ create_pkg_functions_GitLabFreeDesktop() {
   esac
 }
 
+create_pkg_functions_Crediar() {
+  CR_VERS=$(pkg_GETCURVERSION "${1}")
+  if test "$(echo "${CR_VERS}" | wc -c)" = 41  # git full checksum length (40+newline)
+  then
+    eval "${1}_GETNET() {
+      X1=\$(crediarlastcommit_GETNET ${2})
+      X2=\$(crediarcommitdate_GETNET ${2} \${X1})
+      echo \"\${X1} - \${X2}\"
+    }"
+    eval "${1}_GETCUR() {
+      X1=\$(pkg_GETCURVERSION ${1})
+      X2=\$(crediarcommitdate_GETNET ${2} \${X1})
+      echo \"\${X1} - \${X2}\"
+    }"
+  else
+    eval "${1}_GETNET() {
+      X1=\$(crediarlasttag_GETNET ${2})
+      X2=\$(crediartagdate_GETNET ${2} \${X1})
+      echo \"\${X1} - \${X2}\"
+    }"
+    eval "${1}_GETCUR() {
+      X1=\$(pkg_GETCURVERSION ${1})
+      X2=\$(crediartagdate_GETNET ${2} \${X1})
+      echo \"\${X1} - \${X2}\"
+    }"
+  fi
+}
+
 source_site_eval() {
   for pkg in ${PACKAGES}
   do
@@ -1012,9 +1071,6 @@ source_site_eval() {
             *"richwhitehouse.com"* )
               create_pkg_functions_RichWhiteHouse "${pkg}"
             ;;
-            *"demul."* )
-              create_pkg_functions_demul "${pkg}"
-            ;;
             *"redream."* )
               create_pkg_functions_redream "${pkg}"
             ;;
@@ -1058,10 +1114,10 @@ source_site_eval() {
             *"git.tuxfamily.org"* )
               create_pkg_functions_Hatari "${pkg}" "${TESTSTRING%/*}"
             ;;
-            *"git.suyu.dev"* )
-              REPOPATH=$(echo "$TESTSTRING" | sed -e s#'^.*suyu\.dev/\(.*\)\.git.*'#'\1'#)
+            *"git.citron-emu.org"* )
+              REPOPATH=$(echo "$TESTSTRING" | sed -e s#'^.*citron-emu\.org/\(.*\)\.git.*'#'\1'#)
               [ -n "$BRANCH" ] && BRANCH="/src/branch/${BRANCH}"
-              create_pkg_functions_Suyu "${pkg}" "${REPOPATH}" "$BRANCH"
+              create_pkg_functions_Citron "${pkg}" "${REPOPATH}" "$BRANCH"
             ;;
             *"git.kernel.org"* )
               create_pkg_functions_AllLinuxFirmware "${pkg}" "${TESTSTRING%/snapshot*}"
@@ -1118,6 +1174,10 @@ source_site_eval() {
             ;;
             ""|"binaries"|"\$"* )
               create_pkg_functions_No_Site "${pkg}"
+            ;;
+            *"crediar.dev"* )
+              REPOPATH=$(echo "$TESTSTRING" | sed -e 's#.*crediar\.dev/\([^/]*/[^/]*\)[/]*.*#\1#' -e 's#\.git##')
+              create_pkg_functions_Crediar "${pkg}" "${REPOPATH}"
             ;;
             * )
               echo -e "\n*** UNKNOWN SITE\n  $(find ./package/batocera/ -name "${pkg}.mk" -type f) \n  $TESTSTRING \n***\n"

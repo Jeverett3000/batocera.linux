@@ -3,10 +3,12 @@
 # MAME (GroovyMAME)
 #
 ################################################################################
-# Version: GroovyMAME 0.268 - Switchres 2.21d
-MAME_VERSION = gm0268sr221d
+# Version: GroovyMAME 0.277 - Switchres 2.21e
+MAME_VERSION = gm0277sr221e
 MAME_SITE = $(call github,antonioginer,GroovyMAME,$(MAME_VERSION))
-MAME_DEPENDENCIES = sdl2 sdl2_ttf zlib libpng fontconfig sqlite jpeg flac rapidjson expat glm
+MAME_DEPENDENCIES += expat flac fontconfig glm jpeg libpng lua pulseaudio
+MAME_DEPENDENCIES += rapidjson sdl2 sdl2_ttf sqlite zlib
+
 MAME_LICENSE = MAME
 
 MAME_CROSS_ARCH = unknown
@@ -24,24 +26,48 @@ MAME_JOBS := $(jobs)
 # Set PTR64 on/off according to architecture
 ifeq ($(BR2_ARCH_IS_64),y)
 MAME_CROSS_OPTS += PTR64=1
+ifeq ($(BR2_PACKAGE_BATOCERA_TARGET_SM8550),y)
+# Temp hack for sm8550 architectures : disable WERROR to avoid C/CXX flag conflict for armv9 and armv8.x architectures as error
+MAME_CROSS_OPTS += NOWERROR=1
+endif
 else
 MAME_CROSS_OPTS += PTR64=0
 # Temp hack for 32-bit architectures : disable WERROR to avoid switchres log warning treated as error
 MAME_CROSS_OPTS += NOWERROR=1
 endif
 
+# Determine the correct make target based on architecture
+# Default to 'linux' for non-x86 architectures to avoid the -m64 flag issue
+MAME_ARCH = linux
+ifeq ($(BR2_i386),y)
+MAME_ARCH = linux_x86
+endif
+
 # x86_64 is desktop linux based on X11 and OpenGL
 ifeq ($(BR2_PACKAGE_BATOCERA_TARGET_X86_64_ANY),y)
 MAME_CROSS_ARCH = x86_64
+MAME_CROSS_OPTS += PLATFORM=x86
+MAME_ARCH = linux_x64
+# sm8550 has OpenGL
+else ifeq ($(BR2_PACKAGE_BATOCERA_TARGET_SM8550),y)
+MAME_CROSS_OPTS += NO_X11=1 NO_USE_XINPUT=1 NO_USE_BGFX_KHRONOS=1
 # other archs are embedded, no X11, no OpenGL (only ES)
 else
-MAME_CROSS_OPTS += NO_X11=1 NO_OPENGL=1 NO_USE_XINPUT=1 NO_USE_BGFX_KHRONOS=1 FORCE_DRC_C_BACKEND=1 USE_WAYLAND=1
+MAME_CROSS_OPTS += NO_X11=1 NO_OPENGL=1 NO_USE_XINPUT=1 NO_USE_BGFX_KHRONOS=1 FORCE_DRC_C_BACKEND=1
+endif
+
+# Wayland
+ifeq ($(BR2_PACKAGE_BATOCERA_WAYLAND),y)
+MAME_CROSS_OPTS += USE_WAYLAND=1
+else
+MAME_CROSS_OPTS += USE_WAYLAND=0
 endif
 
 # Allow cross-architecture compilation with MAME build system
 ifeq ($(BR2_aarch64),y)
 MAME_CROSS_ARCH = arm64
 MAME_CFLAGS += -DEGL_NO_X11=1
+MAME_CROSS_OPTS += PLATFORM=arm64
 endif
 ifeq ($(BR2_arm),y)
 MAME_CROSS_ARCH = arm
@@ -84,17 +110,27 @@ ifeq ($(BR2_cortex_a73_a53),y)
 MAME_CFLAGS += -mcpu=cortex-a73.cortex-a53 -mtune=cortex-a73.cortex-a53
 endif
 
-define MAME_BUILD_CMDS
-	# First, we need to build genie for host
-	cd $(@D); \
+ifeq ($(BR2_cortex_a76_a55),y)
+ifeq ($(BR2_PACKAGE_BATOCERA_TARGET_SM8550),y)
+MAME_CFLAGS += -pipe -march=armv9-a+i8mm+sm4+sha3+rcpc+crypto+nosve+nosve2
+else
+MAME_CFLAGS += -mcpu=cortex-a76.cortex-a55 -mtune=cortex-a76.cortex-a55
+endif
+endif
+
+define MAME_GENIE
+	+cd $(@D) ; \
 	PATH="$(HOST_DIR)/bin:$$PATH" \
 	$(MAKE) TARGETOS=linux OSD=sdl genie \
 	TARGET=mame SUBTARGET=tiny \
 	NO_USE_PORTAUDIO=1 NO_X11=1 USE_SDL=0 \
 	USE_QTDEBUG=0 DEBUG=0 IGNORE_GIT=1 MPARAM=""
+endef
 
-	# Compile emulation target (MAME)
-	cd $(@D); \
+MAME_PRE_BUILD_HOOKS += MAME_GENIE
+
+define MAME_BUILD_CMDS
+	+cd $(@D) ; \
 	PATH="$(HOST_DIR)/bin:$$PATH" \
 	SYSROOT="$(STAGING_DIR)" \
 	CFLAGS="--sysroot=$(STAGING_DIR) $(MAME_CFLAGS) -fpch-preprocess"   \
@@ -102,7 +138,8 @@ define MAME_BUILD_CMDS
 	PKG_CONFIG="$(HOST_DIR)/usr/bin/pkg-config --define-prefix" \
 	PKG_CONFIG_PATH="$(STAGING_DIR)/usr/lib/pkgconfig" \
 	CCACHE_SLOPPINESS="pch_defines,time_macros" \
-	$(MAKE) -j$(MAME_JOBS) TARGETOS=linux OSD=sdl \
+	$(MAKE) -j$(MAME_JOBS) -l$(MAME_JOBS) $(MAME_ARCH) \
+	TARGETOS=linux OSD=sdl \
 	TARGET=mame \
 	SUBTARGET=mame \
 	OVERRIDE_CC="$(TARGET_CC)" \
@@ -158,7 +195,7 @@ define MAME_INSTALL_TARGET_CMDS
 	cp -R $(@D)/ini				$(TARGET_DIR)/usr/bin/mame/
 	cp -R $(@D)/keymaps			$(TARGET_DIR)/usr/bin/mame/
 	cp -R $(@D)/language		$(TARGET_DIR)/usr/bin/mame/
-	cp -R -u $(@D)/plugins			$(TARGET_DIR)/usr/bin/mame/
+	cp -R -u $(@D)/plugins		$(TARGET_DIR)/usr/bin/mame/
 	# Skip regression tests
 	#cp -R $(@D)/regtests		$(TARGET_DIR)/usr/bin/mame/
 	cp -R $(@D)/roms			$(TARGET_DIR)/usr/bin/mame/
@@ -188,74 +225,37 @@ define MAME_INSTALL_TARGET_CMDS
 	rm -Rf $(TARGET_DIR)/usr/bin/mame/bgfx/shaders/dx11/
 
 	# Copy extra bgfx shaders
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/crt-geom-deluxe-rgb.json $(TARGET_DIR)/usr/bin/mame/bgfx/chains
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/crt-geom-deluxe-composite.json $(TARGET_DIR)/usr/bin/mame/bgfx/chains
+	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/crt-geom-deluxe-rgb.json \
+	    $(TARGET_DIR)/usr/bin/mame/bgfx/chains
+	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/crt-geom-deluxe-composite.json \
+	    $(TARGET_DIR)/usr/bin/mame/bgfx/chains
 
 	# Copy blank disk image(s)
 	mkdir -p $(TARGET_DIR)/usr/share/mame
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/blank.fmtowns $(TARGET_DIR)/usr/share/mame/blank.fmtowns
+	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/blank.fmtowns \
+	    $(TARGET_DIR)/usr/share/mame/blank.fmtowns
 
 	# Copy coin drop plugin
-	cp -R -u $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/coindrop $(TARGET_DIR)/usr/bin/mame/plugins
+	cp -R -u $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/coindrop \
+	    $(TARGET_DIR)/usr/bin/mame/plugins
 
 	# Copy data plugin information
-	cp -R $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/dats			$(TARGET_DIR)/usr/bin/mame/
-	cp -R $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/history			$(TARGET_DIR)/usr/bin/mame/
+	cp -R $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/dats \
+	    $(TARGET_DIR)/usr/bin/mame/
+	cp -R $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/history	\
+	    $(TARGET_DIR)/usr/bin/mame/
 
-	# gameStop script when exiting a rotated screen
-	mkdir -p $(TARGET_DIR)/usr/share/batocera/configgen/scripts
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/rotation_fix.sh $(TARGET_DIR)/usr/share/batocera/configgen/scripts/rotation_fix.sh
+	# gameStop script when exiting a rotated screen (xorg)
+	if [ "$(BR2_PACKAGE_XSERVER_XORG_SERVER)" = "y" ]; then \
+		mkdir -p $(TARGET_DIR)/usr/share/batocera/configgen/scripts; \
+		cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/rotation_fix.sh \
+			$(TARGET_DIR)/usr/share/batocera/configgen/scripts/rotation_fix.sh; \
+	fi
 
 	# Copy user -autoboot_command overrides (batocera.linux/batocera.linux#11706)
 	mkdir -p $(MAME_CONF_INIT)/autoload
-	cp -R $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/autoload			$(MAME_CONF_INIT)
+	cp -R $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/autoload \
+	    $(MAME_CONF_INIT)
 endef
-
-define MAME_EVMAPY
-	mkdir -p $(TARGET_DIR)/usr/share/evmapy
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/adam.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/advision.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/apfm1000.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/apple2.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/apple2gs.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/arcadia.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/archimedes.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/astrocde.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/atom.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/bbc.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/camplynx.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/cdi.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/coco.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/crvision.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/electron.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/fm7.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/fmtowns.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/gamate.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/gameandwatch.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/gamecom.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/gamepock.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/gmaster.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/gp32.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/lcdgames.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/laser310.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/macintosh.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/megaduck.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/neogeo.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/pdp1.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/plugnplay.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/pv1000.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/socrates.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/supracan.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/ti99.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/tutor.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/vc4000.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/vectrex.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/vgmplay.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/vsmile.mame.keys
-	cp $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/mame/mame.mame.keys $(TARGET_DIR)/usr/share/evmapy/xegs.mame.keys
-endef
-
-MAME_POST_INSTALL_TARGET_HOOKS += MAME_EVMAPY
 
 $(eval $(generic-package))

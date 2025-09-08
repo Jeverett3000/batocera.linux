@@ -70,11 +70,11 @@ ifeq ($(BR2_PACKAGE_SCUMMVM),y)
   BATOCERA_DESKTOPAPPS_ICONS   += scummvm.png
 endif
 
-# citra
-ifeq ($(BR2_PACKAGE_CITRA),y)
-  BATOCERA_DESKTOPAPPS_SCRIPTS += batocera-config-citra
-  BATOCERA_DESKTOPAPPS_APPS    += citra-config.desktop
-  BATOCERA_DESKTOPAPPS_ICONS   += citra.png
+# azahar
+ifeq ($(BR2_PACKAGE_AZAHAR),y)
+  BATOCERA_DESKTOPAPPS_SCRIPTS += batocera-config-azahar
+  BATOCERA_DESKTOPAPPS_APPS    += azahar-config.desktop
+  BATOCERA_DESKTOPAPPS_ICONS   += azahar.png
 endif
 
 # rpcs3
@@ -91,13 +91,6 @@ ifeq ($(BR2_PACKAGE_CEMU),y)
   BATOCERA_DESKTOPAPPS_ICONS   += cemu.png
 endif
 
-# fpinball
-ifeq ($(BR2_PACKAGE_FPINBALL),y)
-  BATOCERA_DESKTOPAPPS_SCRIPTS += batocera-config-fpinball
-  BATOCERA_DESKTOPAPPS_APPS    += fpinball-config.desktop
-  BATOCERA_DESKTOPAPPS_ICONS   += fpinball.png
-endif
-
 # model2emu
 ifeq ($(BR2_PACKAGE_MODEL2EMU),y)
   BATOCERA_DESKTOPAPPS_SCRIPTS += batocera-config-model2emu
@@ -110,11 +103,11 @@ ifeq ($(BR2_PACKAGE_BAUH),y)
   BATOCERA_DESKTOPAPPS_APPS    += flatpak-config.desktop
 endif
 
-# suyu
-ifeq ($(BR2_PACKAGE_SUYU),y)
-  BATOCERA_DESKTOPAPPS_SCRIPTS += batocera-config-suyu
-  BATOCERA_DESKTOPAPPS_APPS    += suyu-config.desktop
-  BATOCERA_DESKTOPAPPS_ICONS   += suyu.png
+# citron
+ifeq ($(BR2_PACKAGE_CITRON),y)
+  BATOCERA_DESKTOPAPPS_SCRIPTS += batocera-config-citron
+  BATOCERA_DESKTOPAPPS_APPS    += citron-config.desktop
+  BATOCERA_DESKTOPAPPS_ICONS   += citron.png
 endif
 
 # ryujinx
@@ -122,13 +115,6 @@ ifeq ($(BR2_PACKAGE_RYUJINX),y)
   BATOCERA_DESKTOPAPPS_SCRIPTS += batocera-config-ryujinx
   BATOCERA_DESKTOPAPPS_APPS    += ryujinx-config.desktop
   BATOCERA_DESKTOPAPPS_ICONS   += ryujinx.png
-endif
-
-# demul
-ifeq ($(BR2_PACKAGE_DEMUL),y)
-  BATOCERA_DESKTOPAPPS_SCRIPTS += batocera-config-demul
-  BATOCERA_DESKTOPAPPS_APPS    += demul-config.desktop
-  BATOCERA_DESKTOPAPPS_ICONS   += demul.png
 endif
 
 # melonds
@@ -164,6 +150,18 @@ ifeq ($(BR2_PACKAGE_PLAY),y)
   BATOCERA_DESKTOPAPPS_SCRIPTS += batocera-config-play
   BATOCERA_DESKTOPAPPS_APPS    += play-config.desktop
   BATOCERA_DESKTOPAPPS_ICONS   += play.png
+endif
+
+# shadPS4
+ifeq ($(BR2_PACKAGE_SHADPS4),y)
+  BATOCERA_DESKTOPAPPS_SCRIPTS += batocera-config-shadps4
+  BATOCERA_DESKTOPAPPS_APPS    += shadps4-config.desktop
+  BATOCERA_DESKTOPAPPS_ICONS   += shadps4.png
+endif
+
+# lindbergh loader
+ifeq ($(BR2_PACKAGE_LINDBERGH_LOADER),y)
+  BATOCERA_DESKTOPAPPS_SCRIPTS += batocera-config-lindbergh
 endif
 
 define BATOCERA_DESKTOPAPPS_INSTALL_TARGET_CMDS

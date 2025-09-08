@@ -1,252 +1,164 @@
-#!/usr/bin/env python3
+from __future__ import annotations
 
-from generators.Generator import Generator
-import Command
+import filecmp
+import logging
 import os
-import batoceraFiles
-import subprocess
-import sys
 import shutil
 import stat
 from pathlib import Path, PureWindowsPath
-import configparser
-import filecmp
-import controllersConfig
+from typing import TYPE_CHECKING, Final
 
-from utils.logger import get_logger
-eslog = get_logger(__name__)
+from ... import Command
+from ...batoceraPaths import ROMS, configure_emulator, mkdir_if_not_exists
+from ...controller import generate_sdl_game_controller_config
+from ...utils import wine
+from ...utils.configparser import CaseSensitiveConfigParser
+from ..Generator import Generator
+
+if TYPE_CHECKING:
+    from ...types import HotkeysContext
+
+
+_logger = logging.getLogger(__name__)
+
+MODEL2_ROMS: Final = ROMS / "model2"
 
 class Model2EmuGenerator(Generator):
 
-    def generate(self, system, rom, playersControllers, metadata, guns, wheels, gameResolution):
-        wineprefix = "/userdata/system/wine-bottles/model2"
-        emupath = wineprefix + "/model2emu"
-        rompath = "/userdata/roms/model2/"
+    def getHotkeysContext(self) -> HotkeysContext:
+        return {
+            "name": "model2emu",
+            "keys": { "exit": ["KEY_LEFTALT", "KEY_F4"] }
+        }
 
-        if not os.path.exists(wineprefix):
-            os.makedirs(wineprefix)
+    def generate(self, system, rom, playersControllers, metadata, guns, wheels, gameResolution):
+        wine_runner = wine.Runner.default("model2")
+        emupath = wine_runner.bottle_dir / "model2emu"
+
+        mkdir_if_not_exists(wine_runner.bottle_dir)
 
         #copy model2emu to /userdata for rw & emulator directory creation reasons
-        if not os.path.exists(emupath):
+        if not emupath.exists():
             shutil.copytree("/usr/model2emu", emupath)
-            os.chmod(emupath + "/EMULATOR.INI", stat.S_IRWXO)
-        
+            (emupath / "EMULATOR.INI").chmod(stat.S_IRWXO)
+
         # install windows libraries required
-        if not os.path.exists(wineprefix + "/d3dx9.done"):
-            cmd = ["/usr/wine/winetricks", "-q", "d3dx9"]
-            env = {"LD_LIBRARY_PATH": "/lib32:/usr/wine/ge-custom/lib/wine", "WINEPREFIX": wineprefix }
-            env.update(os.environ)
-            env["PATH"] = "/usr/wine/ge-custom/bin:/bin:/usr/bin"
-            eslog.debug(f"command: {str(cmd)}")
-            proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            out, err = proc.communicate()
-            exitcode = proc.returncode
-            eslog.debug(out.decode())
-            eslog.error(err.decode())
-            with open(wineprefix + "/d3dx9.done", "w") as f:
-                f.write("done")
-        
-        if not os.path.exists(wineprefix + "/d3dcompiler_42.done"):
-            cmd = ["/usr/wine/winetricks", "-q", "d3dcompiler_42"]
-            env = {"LD_LIBRARY_PATH": "/lib32:/usr/wine/ge-custom/lib/wine", "WINEPREFIX": wineprefix }
-            env.update(os.environ)
-            env["PATH"] = "/usr/wine/ge-custom/bin:/bin:/usr/bin"
-            eslog.debug(f"command: {str(cmd)}")
-            proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            out, err = proc.communicate()
-            exitcode = proc.returncode
-            eslog.debug(out.decode())
-            eslog.error(err.decode())
-            with open(wineprefix + "/d3dcompiler_42.done", "w") as f:
-                f.write("done")
-        
-        if not os.path.exists(wineprefix + "/d3dx9_42.done"):
-            cmd = ["/usr/wine/winetricks", "-q", "d3dx9_42"]
-            env = {"LD_LIBRARY_PATH": "/lib32:/usr/wine/ge-custom/lib/wine", "WINEPREFIX": wineprefix }
-            env.update(os.environ)
-            env["PATH"] = "/usr/wine/ge-custom/bin:/bin:/usr/bin"
-            eslog.debug(f"command: {str(cmd)}")
-            proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            out, err = proc.communicate()
-            exitcode = proc.returncode
-            eslog.debug(out.decode())
-            eslog.error(err.decode())
-            with open(wineprefix + "/d3dx9_42.done", "w") as f:
-                f.write("done")
-        
-        if not os.path.exists(wineprefix + "/xact.done"):
-            cmd = ["/usr/wine/winetricks", "-q", "xact"]
-            env = {"LD_LIBRARY_PATH": "/lib32:/usr/wine/ge-custom/lib/wine", "WINEPREFIX": wineprefix }
-            env.update(os.environ)
-            env["PATH"] = "/usr/wine/ge-custom/bin:/bin:/usr/bin"
-            eslog.debug(f"command: {str(cmd)}")
-            proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            out, err = proc.communicate()
-            exitcode = proc.returncode
-            eslog.debug(out.decode())
-            eslog.error(err.decode())
-            with open(wineprefix + "/xact.done", "w") as f:
-                f.write("done")
-        
-        if not os.path.exists(wineprefix + "/xact_x64.done"):
-            cmd = ["/usr/wine/winetricks", "-q", "xact_x64"]
-            env = {"LD_LIBRARY_PATH": "/lib32:/usr/wine/ge-custom/lib/wine", "WINEPREFIX": wineprefix }
-            env.update(os.environ)
-            env["PATH"] = "/usr/wine/ge-custom/bin:/bin:/usr/bin"
-            eslog.debug(f"command: {str(cmd)}")
-            proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            out, err = proc.communicate()
-            exitcode = proc.returncode
-            eslog.debug(out.decode())
-            eslog.error(err.decode())
-            with open(wineprefix + "/xact_x64.done", "w") as f:
-                f.write("done")
-        
+        wine_runner.install_wine_trick('d3dx9')
+        wine_runner.install_wine_trick('d3dcompiler_42')
+        wine_runner.install_wine_trick('d3dx9_42')
+        wine_runner.install_wine_trick('xact')
+        wine_runner.install_wine_trick('xact_x64')
+
         # for existing bottles we want to ensure files are updated as necessary
-        copy_updated_files("/usr/model2emu/scripts", emupath + "/scripts")
+        copy_updated_files(Path("/usr/model2emu/scripts"), emupath / "scripts")
+
+        xinput_cfg_done = wine_runner.bottle_dir / "xinput_cfg.done"
+        if not xinput_cfg_done.exists():
+            copy_updated_files(Path("/usr/model2emu/CFG"), emupath / "CFG")
+            with xinput_cfg_done.open("w") as f:
+                f.write("done")
 
         # move to the emulator path to ensure configs are saved etc
         os.chdir(emupath)
 
-        commandArray = ["/usr/wine/ge-custom/bin/wine", emupath + "/emulator_multicpu.exe"]
+        commandArray: list[str | Path] = [wine_runner.wine, emupath / "emulator_multicpu.exe"]
         # simplify the rom name (strip the directory & extension)
-        if rom != 'config':
-            romname = rom.replace(rompath, "")
-            smplromname = romname.replace(".zip", "")
-            rom = smplromname.split('/', 1)[-1]
-            commandArray.extend([rom])
+        if not configure_emulator(rom):
+            commandArray.extend([rom.stem])
 
         # modify the ini file resolution accordingly
-        configFileName = emupath + "/EMULATOR.INI"
-        Config = configparser.ConfigParser(interpolation=None)
-        # to prevent ConfigParser from converting to lower case
-        Config.optionxform = str
-        if os.path.isfile(configFileName):
+        configFileName = emupath / "EMULATOR.INI"
+        Config = CaseSensitiveConfigParser(interpolation=None)
+        if configFileName.is_file():
             Config.read(configFileName)
-        
+
         # add subdirectories
         dirnum = 1 # existing rom path
-        for x in os.listdir(rompath):
-            possibledir = str(rompath + x)
-            if os.path.isdir(possibledir) and x != "images":
-                dirnum = dirnum +1
+        for possibledir in MODEL2_ROMS.iterdir():
+            if possibledir.is_dir() and possibledir.name != "images":
+                dirnum = dirnum + 1
                 # convert to windows friendly name
                 subdir = PureWindowsPath(possibledir)
                 # add path to ini file
                 Config.set("RomDirs",f"Dir{dirnum}", f"Z:{subdir}")
-        
+
         # set ini to use chosen resolution and automatically start in fullscreen
         Config.set("Renderer","FullScreenWidth", str(gameResolution["width"]))
         Config.set("Renderer","FullScreenHeight", str(gameResolution["height"]))
-        if system.isOptSet("model2_renderRes"):
-            Config.set("Renderer","FullMode", format(system.config["model2_renderRes"]))
-        else:
-            Config.set("Renderer","FullMode", "4")
+        Config.set("Renderer","FullMode", system.config.get("model2_renderRes", "4"))
         Config.set("Renderer","AutoFull", "1")
         Config.set("Renderer","ForceSync", "1")
         # widescreen
-        lua_file_path = emupath + "/scripts/" + rom + ".lua"
-        if system.isOptSet("model2_ratio"):
-            if os.path.exists(lua_file_path):
-                modify_lua_widescreen(lua_file_path, system.config["model2_ratio"])
-        else:
-            if os.path.exists(lua_file_path):
-                modify_lua_widescreen(lua_file_path, "False")
+        lua_file_path = emupath / "scripts" / f"{rom.stem}.lua"
+        if lua_file_path.exists():
+            modify_lua_widescreen(lua_file_path, system.config.get_bool("model2_ratio"))
         # scanlines
-        if system.isOptSet("model2_scanlines"):
-            if os.path.exists(lua_file_path):
-                modify_lua_scanlines(lua_file_path, system.config["model2_scanlines"])
-        else:
-            if os.path.exists(lua_file_path):
-                modify_lua_scanlines(lua_file_path, "False")
+        if lua_file_path.exists():
+            modify_lua_scanlines(lua_file_path, system.config.get_bool("model2_scanlines"))
         # sinden - check if rom is a gun game
         known_gun_roms = ["bel", "gunblade", "hotd", "rchase2", "vcop", "vcop2", "vcopa"]
-        if rom in known_gun_roms:
-            if system.isOptSet('use_guns') and system.getOptBoolean('use_guns') and len(guns) > 0:
-                for gun in guns:
-                    if guns[gun]["need_borders"]:
-                        if os.path.exists(lua_file_path):
-                            bordersSize = controllersConfig.gunsBordersSizeName(guns, system.config)
-                            # add more intelligence for lower resolution screens to avoid massive borders
-                            if bordersSize == "thin":
-                                thickness = "1"
-                            elif bordersSize == "medium":
-                                if gameResolution["width"] <= 640:
-                                    thickness = "1"  # thin
-                                elif 640 < gameResolution["width"] <= 1080:
-                                    thickness = "2"
-                                else:
-                                    thickness = "2"
+        if rom.stem in known_gun_roms and system.config.use_guns and guns:
+            for gun in guns:
+                if gun.needs_borders:
+                    if lua_file_path.exists():
+                        bordersSize = system.guns_borders_size_name(guns)
+                        # add more intelligence for lower resolution screens to avoid massive borders
+                        if bordersSize == "thin":
+                            thickness = "1"
+                        elif bordersSize == "medium":
+                            if gameResolution["width"] <= 640:
+                                thickness = "1"  # thin
+                            elif 640 < gameResolution["width"] <= 1080:
+                                thickness = "2"
                             else:
-                                if gameResolution["width"] << 1080:
-                                    thickness = "2"
-                                else:
-                                    thickness = "3"
-                            
-                            modify_lua_sinden(lua_file_path, "true", thickness)
-                    else:
-                        modify_lua_sinden(lua_file_path, "false", "0")
+                                thickness = "2"
+                        else:
+                            if gameResolution["width"] << 1080:
+                                thickness = "2"
+                            else:
+                                thickness = "3"
+
+                        modify_lua_sinden(lua_file_path, "true", thickness)
+                else:
+                    modify_lua_sinden(lua_file_path, "false", "0")
 
         # now set the other emulator features
-        if system.isOptSet("model2_fakeGouraud"):
-            Config.set("Renderer","FakeGouraud", format(system.config["model2_fakeGouraud"]))
-        else:
-            Config.set("Renderer","FakeGouraud", "0")
-        if system.isOptSet("model2_bilinearFiltering"):
-            Config.set("Renderer","Bilinear", format(system.config["model2_bilinearFiltering"]))
-        else:
-            Config.set("Renderer","Bilinear", "1")
-        if system.isOptSet("model2_trilinearFiltering"):
-            Config.set("Renderer","Trilinear", format(system.config["model2_trilinearFiltering"]))
-        else:
-            Config.set("Renderer","Trilinear", "0")
-        if system.isOptSet("model2_filterTilemaps"):
-            Config.set("Renderer","FilterTilemaps", format(system.config["model2_filterTilemaps"]))
-        else:
-            Config.set("Renderer","FilterTilemaps", "0")
-        if system.isOptSet("model2_forceManaged"):
-            Config.set("Renderer","ForceManaged", format(system.config["model2_forceManaged"]))
-        else:
-            Config.set("Renderer","ForceManaged", "0")
-        if system.isOptSet("model2_enableMIP"):
-            Config.set("Renderer","AutoMip", format(system.config["model2_enableMIP"]))
-        else:
-            Config.set("Renderer","AutoMip", "0")
-        if system.isOptSet("model2_meshTransparency"):
-            Config.set("Renderer","MeshTransparency", format(system.config["model2_meshTransparency"]))
-        else:
-            Config.set("Renderer","MeshTransparency", "0")
-        if system.isOptSet("model2_fullscreenAA"):
-            Config.set("Renderer","FSAA", format(system.config["model2_fullscreenAA"]))
-        else:
-            Config.set("Renderer","FSAA", "0")
-        if system.isOptSet("model2_useRawInput"):
-            Config.set("Input","UseRawInput", format(system.config["model2_useRawInput"]))
-        else:
-            Config.set("Input","UseRawInput", "0")
-        if system.isOptSet("model2_crossHairs"):
-            Config.set("Renderer","DrawCross", format(system.config["model2_crossHairs"]))
+        Config.set("Renderer","FakeGouraud", system.config.get("model2_fakeGouraud", "0"))
+        Config.set("Renderer","Bilinear", system.config.get("model2_bilinearFiltering", "1"))
+        Config.set("Renderer","Trilinear", system.config.get("model2_trilinearFiltering", "0"))
+        Config.set("Renderer","FilterTilemaps", system.config.get("model2_filterTilemaps", "0"))
+        Config.set("Renderer","ForceManaged", system.config.get("model2_forceManaged", "0"))
+        Config.set("Renderer","AutoMip", system.config.get("model2_enableMIP", "0"))
+        Config.set("Renderer","MeshTransparency", system.config.get("model2_meshTransparency", "0"))
+        Config.set("Renderer","FSAA", system.config.get("model2_fullscreenAA", "0"))
+        Config.set("Input","UseRawInput", system.config.get("model2_useRawInput", "0"))
+        if crosshairs := system.config.get("model2_crossHairs"):
+            Config.set("Renderer","DrawCross", crosshairs)
         else:
             for gun in guns:
-                if guns[gun]["need_cross"]:
+                if gun.needs_cross:
                     Config.set("Renderer","DrawCross", "1")
                 else:
                     Config.set("Renderer","DrawCross", "0")
-        
-        with open(configFileName, 'w') as configfile:
+
+        # xinput
+        Config.set("Input","XInput", system.config.get_bool("model2_xinput", return_values=("1", "0")))
+
+        # force feedback
+        Config.set("Input","EnableFF", system.config.get_bool("model2_forceFeedback", return_values=("1", "0")))
+
+        with configFileName.open('w') as configfile:
             Config.write(configfile)
-        
+
         # set the environment variables
-        environment = {
-            "WINEPREFIX": wineprefix,
-            "LD_LIBRARY_PATH": "/lib32:/usr/wine/ge-custom/lib/wine",
-            "LIBGL_DRIVERS_PATH": "/lib32/dri",
-            "SPA_PLUGIN_DIR": "/usr/lib/spa-0.2:/lib32/spa-0.2",
-            "PIPEWIRE_MODULE_DIR": "/usr/lib/pipewire-0.3:/lib32/pipewire-0.3"
-        }
+        environment = wine_runner.get_environment()
+        environment.update({
+            "SDL_GAMECONTROLLERCONFIG": generate_sdl_game_controller_config(playersControllers),
+            "SDL_JOYSTICK_HIDAPI": "0"
+        })
 
         # check if software render option is chosen
-        if system.isOptSet("model2_Software") and system.config["model2_Software"] == "1":
+        if system.config.get("model2_Software") == "1":
             environment.update({
                 "__GLX_VENDOR_LIBRARY_NAME": "mesa",
                 "MESA_LOADER_DRIVER_OVERRIDE": "llvmpipe",
@@ -254,30 +166,30 @@ class Model2EmuGenerator(Generator):
             })
 
         # ensure nvidia driver used for vulkan
-        if os.path.exists('/var/tmp/nvidia.prime'):
+        if Path('/var/tmp/nvidia.prime').exists():
             variables_to_remove = ['__NV_PRIME_RENDER_OFFLOAD', '__VK_LAYER_NV_optimus', '__GLX_VENDOR_LIBRARY_NAME']
             for variable_name in variables_to_remove:
                 if variable_name in os.environ:
                     del os.environ[variable_name]
-            
+
             environment.update(
                 {
                     'VK_ICD_FILENAMES': '/usr/share/vulkan/icd.d/nvidia_icd.x86_64.json',
                     'VK_LAYER_PATH': '/usr/share/vulkan/explicit_layer.d'
                 }
             )
-        
-        # now run the emulator        
+
+        # now run the emulator
         return Command.Command(array=commandArray, env=environment)
 
 
-def modify_lua_widescreen(file_path, condition):
-    with open(file_path, 'r') as lua_file:
+def modify_lua_widescreen(file_path: Path, condition: bool) -> None:
+    with file_path.open('r') as lua_file:
         lines = lua_file.readlines()
-        
-    modified_lines = []
+
+    modified_lines: list[str] = []
     for line in lines:
-        if condition == "True":
+        if condition:
             if "wide=false" in line:
                 modified_line = line.replace("wide=false", "wide=true")
             else:
@@ -289,47 +201,43 @@ def modify_lua_widescreen(file_path, condition):
             else:
                 modified_line = line  # No change
             modified_lines.append(modified_line)
-    
-    with open(file_path, 'w') as lua_file:
+
+    with file_path.open('w') as lua_file:
         lua_file.writelines(modified_lines)
 
-def modify_lua_scanlines(file_path, condition):
-    with open(file_path, 'r') as lua_file:
+def modify_lua_scanlines(file_path: Path, condition: bool) -> None:
+    with file_path.open('r') as lua_file:
         original_lines = lua_file.readlines()
 
-    modified_lines = []
-    found_test_surface_line = False
+    modified_lines: list[str] = []
     scanlines_line_added = False
 
     for line in original_lines:
         if "TestSurface = Video_CreateSurfaceFromFile" in line:
-            found_test_surface_line = True
             modified_lines.append(line)
             if "Options.scanlines.value=" not in line and not scanlines_line_added:
-                modified_lines.append(f'\tOptions.scanlines.value={"1" if condition == "True" else "0"}\r\n')
+                modified_lines.append(f'\tOptions.scanlines.value={"1" if condition else "0"}\r\n')
                 scanlines_line_added = True
         elif "Options.scanlines.value=" in line:
-            if condition == "True":
+            if condition:
                 modified_lines.append(line.replace("Options.scanlines.value=0", "Options.scanlines.value=1"))
-            elif condition == "False":
+            else:
                 modified_lines.append(line.replace("Options.scanlines.value=1", "Options.scanlines.value=0"))
         else:
             modified_lines.append(line)
 
-    with open(file_path, 'w') as lua_file:
+    with file_path.open('w') as lua_file:
         lua_file.writelines(modified_lines)
 
-def modify_lua_sinden(file_path, condition, thickness):
-    with open(file_path, 'r') as lua_file:
+def modify_lua_sinden(file_path: Path, condition: str, thickness: str) -> None:
+    with file_path.open('r') as lua_file:
         original_lines = lua_file.readlines()
 
-    modified_lines = []
-    found_test_surface_line = False
+    modified_lines: list[str] = []
     sinden_line_added = False
 
     for line in original_lines:
         if "TestSurface = Video_CreateSurfaceFromFile" in line:
-            found_test_surface_line = True
             modified_lines.append(line)
             if "Options.bezels.value=" not in line and not sinden_line_added:
                 modified_lines.append(f'\tOptions.bezels.value={"0" if condition == "False" else thickness}\r\n')
@@ -339,20 +247,20 @@ def modify_lua_sinden(file_path, condition, thickness):
         else:
             modified_lines.append(line)
 
-    with open(file_path, 'w') as lua_file:
+    with file_path.open('w') as lua_file:
         lua_file.writelines(modified_lines)
 
-def copy_updated_files(source_path, destination_path):
+def copy_updated_files(source_path: Path, destination_path: Path) -> None:
     dcmp = filecmp.dircmp(source_path, destination_path)
-    
+
     # Copy missing files and files needing updates from source to destination
     for name in dcmp.left_only + dcmp.diff_files:
-        src = os.path.join(source_path, name)
-        dst = os.path.join(destination_path, name)
-        
-        if os.path.isdir(src):
+        src = source_path / name
+        dst = destination_path / name
+
+        if src.is_dir():
             shutil.copytree(src, dst)
-            eslog.debug(f"Copying directory {src} to {dst}")
+            _logger.debug("Copying directory %s to %s", src, dst)
         else:
             shutil.copy2(src, dst)
-            eslog.debug(f"Copying file {src} to {dst}")
+            _logger.debug("Copying file %s to %s", src, dst)

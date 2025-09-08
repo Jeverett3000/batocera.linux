@@ -1,33 +1,36 @@
-#!/usr/bin/env python
+from __future__ import annotations
 
-import Command
-from generators.Generator import Generator
-import controllersConfig
-import os
-import configparser
-import batoceraFiles
+from typing import TYPE_CHECKING
+
+from ... import Command
+from ...batoceraPaths import BIOS
+from ..Generator import Generator
+
+if TYPE_CHECKING:
+    from ...types import HotkeysContext
+
 
 class TsugaruGenerator(Generator):
 
     def generate(self, system, rom, playersControllers, metadata, guns, wheels, gameResolution):
 
-	# Start emulator fullscreen
-        commandArray = ["/usr/bin/Tsugaru_CUI", "/userdata/bios/fmtowns"]
-        commandArray += ["-AUTOSCALE", "-HIGHRES", "-NOWAITBOOT"]
+        # Start emulator fullscreen
+        commandArray = ["/usr/bin/Tsugaru_CUI", BIOS / "fmtowns"]
+        commandArray += ["-FULLSCREEN", "-NOHIGHRESPCM", "-NOWAITBOOT"]
+        commandArray += ["-AUTOSCALE", "-MAINTAINASPECT", "-HIGHRES"]
         commandArray += ["-GAMEPORT0", "KEY"]
         commandArray += ["-KEYBOARD", "DIRECT"]
         commandArray += ["-PAUSEKEY", "F10"]
 
         # CD Speed
-        if system.isOptSet('cdrom_speed') and system.config['cdrom_speed'] != 'auto':
-            commandArray += ["-CDSPEED", system.config["cdrom_speed"]]
+        if (cdrom_speed := system.config.get('cdrom_speed', 'auto')) != 'auto':
+            commandArray += ["-CDSPEED", cdrom_speed]
 
         # CPU Emulation
-        if system.isOptSet('386dx') and system.config['386dx'] == '1':
+        if system.config.get('386dx') == '1':
             commandArray += ["-PRETEND386DX"]
 
-        extension = os.path.splitext(rom)[1][1:].lower()
-        if extension in ['iso', 'cue', 'bin']:
+        if rom.suffix.lower() in ['.iso', '.cue', '.bin']:
             # Launch CD-ROM
             commandArray += ["-CD", rom]
         else:
@@ -35,3 +38,9 @@ class TsugaruGenerator(Generator):
             commandArray += ["-FD0", rom]
 
         return Command.Command(array=commandArray)
+
+    def getHotkeysContext(self) -> HotkeysContext:
+        return {
+            "name": "tsugaru",
+            "keys": { "exit": ["KEY_LEFTALT", "KEY_F4"], "menu": "KEY_F10", "pause": "KEY_F10" }
+        }

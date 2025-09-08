@@ -131,8 +131,7 @@ systems = {
 
     # ---------- Sega ---------- #
     # https://docs.libretro.com/library/flycast/#bios
-    "dreamcast":    { "name": "Dreamcast", "biosFiles":   [ { "md5": "e10c53c2f8b90bab96ead2d368858623", "file": "bios/dc_boot.bin"  },
-                                                            { "md5": "0a93f7940c455905bea6e392dfde92a4", "file": "bios/dc_flash.bin" } ] },
+    "dreamcast":    { "name": "Dreamcast", "biosFiles":   [ { "md5": "e10c53c2f8b90bab96ead2d368858623", "file": "bios/dc/dc_boot.bin" } ] },
 
     # https://github.com/libretro/libretro-super/blob/master/dist/info/flycast_libretro.info
     "naomi":        { "name": "Naomi", "biosFiles":       [ { "md5": "eb4099aeb42ef089cfe94f8fe95e51f6", "file": "bios/dc/naomi.zip"   } ] },
@@ -318,11 +317,7 @@ systems = {
     "laser310":  { "name": "VTech Laser 310", "biosFiles": [  { "md5": "", "file": "bios/laser310.zip" },
                                   { "md5": "42c8f9e6c2133ae0e953b89ccbbdb7e2", "zippedFile": "vtechv20.u12", "file": "bios/laser310.zip"},
                                   { "md5": "f7e5d9a3eb2b57bf5f4e2a4565318a8f", "zippedFile": "vtechv21.u12", "file": "bios/laser310.zip"} ] },
-
-
-    # ---------- Future Pinball ---------- #
-    "fpinball":   { "name": "Future Pinball", "biosFiles":  [ { "md5": "65a8ebf870420316a939ac44fd4c731d", "file": "bios/wsh57/scripten.exe"  } ] },
-
+    
     # ---------- Super Cassette Vision ---------- #
     "scv":   { "name": "Super Cassette Vision", "biosFiles":  [ { "md5": "635a978fd40db9a18ee44eff449fc126", "file": "bios/upd7801g.s01"  } ] },
 
@@ -798,6 +793,10 @@ systems = {
     # ---------- Sega Chihiro ---------- #
     "chihiro": { "name": "Sega Chihiro", "biosFiles": [{ "md5": "d49c52a4102f6df7bcf8d0617ac475ed", "file": "bios/mcpx_1.0.bin" },
                                                        { "md5": "f23d7e00ae8fbf88908ed1f9165f35eb", "file": "bios/cerbios.bin" }] },
+
+    # ---------- Oric Atmos ---------- #
+    "oricatmos": { "name": "Oric Atmos", "biosFiles": [{ "md5": "a330779c42ad7d0c4ac6ef9e92788ec6", "file": "bios/Oric/basic11.rom" },
+                                                       { "md5": "c888b36bf0fc222c3585c3fabe556d21", "file": "bios/Oric/colour.rom" }] },
 }
 
 class BiosStatus:

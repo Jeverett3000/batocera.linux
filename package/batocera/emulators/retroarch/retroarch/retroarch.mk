@@ -4,15 +4,15 @@
 #
 ################################################################################
 
-RETROARCH_VERSION = v1.19.1
+RETROARCH_VERSION = v1.21.0
 RETROARCH_SITE = $(call github,libretro,RetroArch,$(RETROARCH_VERSION))
 RETROARCH_LICENSE = GPLv3+
 RETROARCH_DEPENDENCIES = host-pkgconf dejavu retroarch-assets flac noto-cjk-fonts
 # install in staging for debugging (gdb)
 RETROARCH_INSTALL_STAGING = YES
 
-RETROARCH_CONF_OPTS = --disable-oss --enable-zlib --disable-qt --enable-threads --enable-ozone \
-    --enable-xmb --disable-discord --enable-flac --enable-lua --enable-networking \
+RETROARCH_CONF_OPTS = --disable-oss --disable-qt --enable-threads --enable-ozone \
+    --enable-xmb --disable-discord --disable-builtinflac --enable-flac --enable-lua --enable-networking \
 	--enable-translate --enable-rgui --disable-cdrom
 
 ifeq ($(BR2_ENABLE_DEBUG),y)
@@ -103,7 +103,7 @@ ifeq ($(BR2_PACKAGE_HAS_LIBOPENVG),y)
 endif
 
 ifeq ($(BR2_PACKAGE_ZLIB),y)
-    RETROARCH_CONF_OPTS += --enable-zlib
+    RETROARCH_CONF_OPTS += --disable-builtinzlib --enable-zlib
     RETROARCH_DEPENDENCIES += zlib
 else
     RETROARCH_CONF_OPTS += --disable-zlib
@@ -141,8 +141,11 @@ ifeq ($(BR2_PACKAGE_XSERVER_XORG_SERVER),)
 	endif
 endif
 
-ifeq ($(BR2_PACKAGE_WAYLAND)$(BR2_PACKAGE_SWAY),yy)
+# disable libdecor : A client-side decorations library for Wayland client
+# it makes retroarch unable to start on dual screen. It looks like a ra bug
+ifeq ($(BR2_PACKAGE_WAYLAND),y)
     RETROARCH_CONF_OPTS += --enable-wayland
+    RETROARCH_CONF_OPTS += --disable-libdecor
 else
     RETROARCH_CONF_OPTS += --disable-wayland
 endif
@@ -150,6 +153,11 @@ endif
 ifeq ($(BR2_PACKAGE_VULKAN_LOADER)$(BR2_PACKAGE_VULKAN_HEADERS),yy)
     RETROARCH_CONF_OPTS += --enable-vulkan
     RETROARCH_DEPENDENCIES += vulkan-headers vulkan-loader slang-shaders
+endif
+
+ifeq ($(BR2_PACKAGE_GLSLANG),y)
+    RETROARCH_CONF_OPTS += --disable-builtinglslang --enable-glslang
+    RETROARCH_DEPENDENCIES += glslang
 endif
 
 ifeq ($(BR2_riscv),y)
@@ -190,14 +198,6 @@ endef
 define RETROARCH_INSTALL_STAGING_CMDS
 	$(MAKE) CXX="$(TARGET_CXX)" -C $(@D) DESTDIR=$(STAGING_DIR) install
 endef
-
-define RETROARCH_EVMAPY
-	mkdir -p $(TARGET_DIR)/usr/share/evmapy
-	cp -f $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/retroarch/retroarch/libretro.keys \
-	    $(TARGET_DIR)/usr/share/evmapy
-endef
-
-RETROARCH_POST_INSTALL_TARGET_HOOKS += RETROARCH_EVMAPY
 
 $(eval $(generic-package))
 

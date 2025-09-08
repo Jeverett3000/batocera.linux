@@ -1,28 +1,36 @@
-import Command
-from generators.Generator import Generator
-from utils.logger import get_logger
-import os
+from __future__ import annotations
 
-eslog = get_logger(__name__)
+from typing import TYPE_CHECKING, Final
+
+from ... import Command
+from ...batoceraPaths import SAVES, mkdir_if_not_exists
+from ..Generator import Generator
+
+if TYPE_CHECKING:
+    from ...types import HotkeysContext
+
+_THEXTECH_SAVES: Final = SAVES / "thextech"
 
 class TheXTechGenerator(Generator):
 
     def generate(self, system, rom, playersControllers, metadata, guns, wheels, gameResolution):
 
-        if not os.path.exists("/userdata/saves/thextech"):
-                os.makedirs("/userdata/saves/thextech")
+        mkdir_if_not_exists(_THEXTECH_SAVES)
 
-        commandArray = ["/usr/bin/thextech", "-u", "/userdata/saves/thextech"]
+        commandArray = ["/usr/bin/thextech", "-u", _THEXTECH_SAVES]
 
         # rendering_mode: sw, hw (default), vsync
-        if system.isOptSet('rendering_mode'):
-            commandArray.extend(["-r", system.config['rendering_mode']])
+        if rendering_mode := system.config.get('rendering_mode'):
+            commandArray.extend(["-r", rendering_mode])
 
-        if system.isOptSet('frameskip') and system.getOptBoolean('frameskip') == False:
-            commandArray.extend(["--no-frameskip"])
-        else:
-            commandArray.extend(["--frameskip"])
+        commandArray.extend([system.config.get_bool('frameskip', True, return_values=("--frameskip", "--no-frameskip"))])
 
         commandArray.extend(["-c", rom])
 
         return Command.Command(array=commandArray)
+
+    def getHotkeysContext(self) -> HotkeysContext:
+        return {
+            "name": "thextech",
+            "keys": { "exit": ["KEY_LEFTALT", "KEY_F4"], "menu": "KEY_ENTER", "pause": "KEY_ENTER" }
+        }

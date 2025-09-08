@@ -3,9 +3,9 @@
 # vpinball
 #
 ################################################################################
-# Version: Commits on Aug 14, 2024
+# Version: Commits on Sep 4, 2025
 # uses standalone tree for now
-VPINBALL_VERSION = 4a812d1ccffae3f9a0ac28fa049c987f3e8d4b92
+VPINBALL_VERSION = e1f26aa42f2f5fb65d2d6637741de1b12f3bda7e
 VPINBALL_SITE = $(call github,vpinball,vpinball,$(VPINBALL_VERSION))
 VPINBALL_LICENSE = GPLv3+
 VPINBALL_LICENSE_FILES = LICENSE
@@ -13,18 +13,20 @@ VPINBALL_DEPENDENCIES = host-libcurl libfreeimage libpinmame libaltsound libdmdu
 VPINBALL_SUPPORTS_IN_SOURCE_BUILD = NO
 
 # handle supported target platforms
-ifeq ($(BR2_PACKAGE_BATOCERA_TARGET_RK3588),y)
+ifeq ($(BR2_PACKAGE_BATOCERA_TARGET_RK3588)$(BR2_PACKAGE_BATOCERA_TARGET_RK3588_SDIO),y)
     SOURCE = CMakeLists_gl-linux-aarch64.txt
     SOURCE_DIR = linux-aarch64
     ARCH = aarch64
     VPINBALL_CONF_OPTS += "-DBUILD_RK3588=ON"
-endif
-
-ifeq ($(BR2_PACKAGE_BATOCERA_TARGET_BCM2711)$(BR2_PACKAGE_BATOCERA_TARGET_BCM2712),y)
+else ifeq ($(BR2_PACKAGE_BATOCERA_TARGET_BCM2711)$(BR2_PACKAGE_BATOCERA_TARGET_BCM2712),y)
     SOURCE = CMakeLists_gl-linux-aarch64.txt
     SOURCE_DIR = linux-aarch64
     ARCH = aarch64
     VPINBALL_CONF_OPTS += "-DBUILD_RPI=ON"
+else ifeq ($(BR2_aarch64),y)
+    SOURCE = CMakeLists_gl-linux-aarch64.txt
+    SOURCE_DIR = linux-aarch64
+    ARCH = aarch64
 endif
 
 ifeq ($(BR2_PACKAGE_BATOCERA_TARGET_X86_64_ANY),y)
@@ -63,6 +65,8 @@ define VPINBALL_INSTALL_TARGET_CMDS
     cp -R $(@D)/buildroot-build/assets $(TARGET_DIR)/usr/bin/vpinball/
     cp -R $(@D)/buildroot-build/scripts $(TARGET_DIR)/usr/bin/vpinball/
     cp -R $(@D)/buildroot-build/shader10.8.0 $(TARGET_DIR)/usr/bin/vpinball/
+    $(INSTALL) -D -m 0755 $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/vpinball/batocera-vpx-scraper.py \
+        $(TARGET_DIR)/usr/bin/batocera-vpx-scraper
 endef
 
 define VPINBALL_EVMAPY

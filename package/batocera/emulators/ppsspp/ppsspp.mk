@@ -4,7 +4,7 @@
 #
 ################################################################################
 
-PPSSPP_VERSION = v1.17.1
+PPSSPP_VERSION = v1.19.3
 PPSSPP_SITE = https://github.com/hrydgard/ppsspp.git
 PPSSPP_SITE_METHOD=git
 PPSSPP_GIT_SUBMODULES=YES
@@ -39,21 +39,6 @@ ifeq ($(BR2_PACKAGE_BATOCERA_TARGET_X86_ANY),y)
     PPSSPP_DEPENDENCIES += libglew libglu
 endif
 
-# enable vulkan if we are building with it
-ifeq ($(BR2_PACKAGE_VULKAN_HEADERS)$(BR2_PACKAGE_VULKAN_LOADER),yy)
-    PPSSPP_CONF_OPTS += -DVULKAN=ON
-    PPSSPP_CONF_OPTS += -DUSE_VULKAN_DISPLAY_KHR=ON
-else
-    PPSSPP_CONF_OPTS += -DVULKAN=OFF
-endif
-# enable x11/vulkan interface only if xorg
-ifeq ($(BR2_PACKAGE_XORG7),y)
-    PPSSPP_CONF_OPTS += -DUSING_X11_VULKAN=ON
-else
-    PPSSPP_CONF_OPTS += -DUSING_X11_VULKAN=OFF
-    PPSSPP_TARGET_CFLAGS += -DEGL_NO_X11=1 -DMESA_EGL_NO_X11_HEADERS=1
-endif
-
 # arm
 ifeq ($(BR2_arm),y)
     PPSSPP_CONF_OPTS += -DARM=ON
@@ -82,13 +67,26 @@ ifeq ($(BR2_PACKAGE_BATOCERA_TARGET_X86_64_ANY),y)
     PPSSPP_CONF_OPTS += -DX86_64=ON
 endif
 
-# rpi4/5 vulkan support
-ifeq ($(BR2_PACKAGE_BATOCERA_TARGET_BCM2711),y)
-    PPSSPP_CONF_OPTS += -DARM_NO_VULKAN=OFF
-else ifeq ($(BR2_PACKAGE_BATOCERA_TARGET_BCM2712),y)
-    PPSSPP_CONF_OPTS += -DARM_NO_VULKAN=OFF
-else ifeq ($(BR2_arm)$(BR2_aarch64),y)
-    PPSSPP_CONF_OPTS += -DARM_NO_VULKAN=ON
+# enable vulkan if we are building with it
+ifeq ($(BR2_PACKAGE_VULKAN_HEADERS)$(BR2_PACKAGE_VULKAN_LOADER),yy)
+    PPSSPP_CONF_OPTS += -DVULKAN=ON
+    PPSSPP_CONF_OPTS += -DUSE_VULKAN_DISPLAY_KHR=ON
+    # enable x11/vulkan interface only if xorg
+    ifeq ($(BR2_PACKAGE_XORG7),y)
+        PPSSPP_CONF_OPTS += -DUSING_X11_VULKAN=ON
+    else
+        PPSSPP_CONF_OPTS += -DUSING_X11_VULKAN=OFF
+        PPSSPP_TARGET_CFLAGS += -DEGL_NO_X11=1 -DMESA_EGL_NO_X11_HEADERS=1
+    endif
+    # rpi4/5 vulkan support
+    ifeq ($(BR2_PACKAGE_BATOCERA_TARGET_BCM2711)$(BR2_PACKAGE_BATOCERA_TARGET_BCM2712),y)
+        PPSSPP_CONF_OPTS += -DARM_NO_VULKAN=OFF
+    else ifeq ($(BR2_arm)$(BR2_aarch64),y)
+        PPSSPP_CONF_OPTS += -DARM_NO_VULKAN=ON
+    endif
+else
+    PPSSPP_CONF_OPTS += -DVULKAN=OFF
+    PPSSPP_CONF_OPTS += -DUSING_X11_VULKAN=OFF
 endif
 
 ifeq ($(BR2_PACKAGE_BATOCERA_WAYLAND),y)
@@ -116,19 +114,12 @@ define PPSSPP_INSTALL_TARGET_CMDS
         $(TARGET_DIR)/usr/bin/PPSSPP
     mkdir -p $(TARGET_DIR)/usr/share/ppsspp
     cp -R $(@D)/assets $(TARGET_DIR)/usr/share/ppsspp/PPSSPP
-    # Fix PSP font for languages like Japanese
-    # (font from https://github.com/minoryorg/Noto-Sans-CJK-JP/blob/master/fonts/)
-    cp -f $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/ppsspp/NotoSansCJKjp-DemiLight.ttf \
+    # Fix PSP font rendering for CJK languages
+    # (font from http://wenq.org/wqy2/index.cgi?Download#MicroHei_Beta)
+    cp -f $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/ppsspp/wqy-microhei.ttc \
         $(TARGET_DIR)/usr/share/ppsspp/PPSSPP/Roboto-Condensed.ttf
 endef
 
-define PPSSPP_POST_PROCESS
-	mkdir -p $(TARGET_DIR)/usr/share/evmapy
-	cp -f $(BR2_EXTERNAL_BATOCERA_PATH)/package/batocera/emulators/ppsspp/psp.ppsspp.keys \
-        $(TARGET_DIR)/usr/share/evmapy
-endef
-
 PPSSPP_PRE_CONFIGURE_HOOKS += PPSSPP_UPDATE_INCLUDES
-PPSSPP_POST_INSTALL_TARGET_HOOKS += PPSSPP_POST_PROCESS
 
 $(eval $(cmake-package))
